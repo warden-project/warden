@@ -1,0 +1,4 @@
+*.img
+*.log
+/tests/bats/tmp/
+.claude/

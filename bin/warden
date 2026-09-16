@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# bin/warden — entrypoint
+#
+# Requires root. This tool edits disk encryption config and can run
+# destructive disk operations; requiring root up front (rather than
+# elevating per-command) means privilege is a single, visible,
+# consciously-granted precondition instead of a series of sudo prompts
+# a person under time pressure clicks through without reading.
+set -euo pipefail
+
+WARDEN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# shellcheck source=lib/core/log.sh
+source "${WARDEN_ROOT}/lib/core/log.sh"
+# shellcheck source=lib/core/exec.sh
+source "${WARDEN_ROOT}/lib/core/exec.sh"
+# shellcheck source=lib/core/device.sh
+source "${WARDEN_ROOT}/lib/core/device.sh"
+# shellcheck source=lib/core/confirm.sh
+source "${WARDEN_ROOT}/lib/core/confirm.sh"
+# shellcheck source=lib/core/backup.sh
+source "${WARDEN_ROOT}/lib/core/backup.sh"
+# shellcheck source=lib/core/pkg.sh
+source "${WARDEN_ROOT}/lib/core/pkg.sh"
+# shellcheck source=lib/tui/menu.sh
+source "${WARDEN_ROOT}/lib/tui/menu.sh"
+
+if [[ "${EUID}" -ne 0 ]]; then
+    echo "warden: must be run as root (e.g. sudo warden). Refusing to elevate per-command." >&2
+    exit 1
+fi
+
+log_init
+
+MENU_TEXT=$'Day 0 -- Initial setup\n1) Install components\n2) Configure Tang server\n3) Tang servers to trust (bindings)\n\nDay 1 -- Ongoing configuration\n4) LUKS setup wizard\n5) LUKS enrolment wizard\n6) Enable/verify late-boot unlocker\n7) Status dashboard\n\nMaintenance\n8) Add/remove/rotate a binding\n9) Backup LUKS header(s)\n10) Rotate Tang server keys\n\nDANGER ZONE\n11) Erase LUKS header\n\n12) Uninstall / revert\n13) Exit'
+
+main_menu_loop() {
+    local choice
+    while true; do
+        choice="$(warden_menu "Warden -- NBDE Management" "$MENU_TEXT" \
+            1 "Install components (Tang / Clevis / both)" \
+            2 "Configure Tang server" \
+            3 "Tang servers to trust (bindings)" \
+            4 "LUKS setup wizard" \
+            5 "LUKS enrolment wizard" \
+            6 "Enable/verify late-boot unlocker" \
+            7 "Status dashboard" \
+            8 "Add / remove / rotate a binding" \
+            9 "Backup LUKS header(s)" \
+            10 "Rotate Tang server keys" \
+            11 "DANGER ZONE: Erase LUKS header" \
+            12 "Uninstall / revert" \
+            13 "Exit")" || exit 0
+
+        case "$choice" in
+            13) exit 0 ;;
+            *) warden_msg "Not yet implemented" "Menu item ${choice} is not yet implemented (Phase 0 scaffold)." ;;
+        esac
+    done
+}
+
+main_menu_loop
