@@ -47,3 +47,17 @@ ensure_systemd_unit_enabled() {
     fi
     run_cmd "enable ${unit}" -- systemctl enable "$unit"
 }
+
+is_systemd_unit_active() {
+    local unit="$1"
+    systemctl is-active --quiet "$unit" 2>/dev/null
+}
+
+ensure_systemd_unit_active() {
+    local unit="$1"
+    if is_systemd_unit_active "$unit"; then
+        log_line "UNIT: ${unit} already active, skipping"
+        return 0
+    fi
+    run_cmd "start ${unit}" -- systemctl start "$unit"
+}

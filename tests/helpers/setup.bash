@@ -20,6 +20,7 @@ warden_test_setup() {
     source "${WARDEN_ROOT}/lib/core/pkg.sh"
     source "${WARDEN_ROOT}/lib/features/install.sh"
     source "${WARDEN_ROOT}/lib/features/status.sh"
+    source "${WARDEN_ROOT}/lib/features/tang_server.sh"
 
     log_init
 }
