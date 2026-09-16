@@ -12,8 +12,13 @@ Tang and Clevis — on Ubuntu Server hosts.
 
 ## Status
 
-Phase 0 (scaffolding: safety primitives, menu shell, CI) is complete.
-See the repository README for the phase roadmap.
+Phase 1 is complete: install (menu 1) and the status dashboard
+(menu 7) are implemented, on top of the Phase 0 safety primitives
+(logging, dry-run execution, the root/boot/EFI guard, typed
+confirmation, backup-before-edit). Everything from menu 2 onward
+(Tang server config, bindings/SSS/Tailscale, the LUKS wizards,
+maintenance, and the Danger Zone) is not yet built. See the repository
+README for the phase roadmap.
 
 ## Scope
 

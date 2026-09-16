@@ -24,6 +24,10 @@ source "${WARDEN_ROOT}/lib/core/backup.sh"
 source "${WARDEN_ROOT}/lib/core/pkg.sh"
 # shellcheck source=lib/tui/menu.sh
 source "${WARDEN_ROOT}/lib/tui/menu.sh"
+# shellcheck source=lib/features/install.sh
+source "${WARDEN_ROOT}/lib/features/install.sh"
+# shellcheck source=lib/features/status.sh
+source "${WARDEN_ROOT}/lib/features/status.sh"
 
 if [[ "${EUID}" -ne 0 ]]; then
     echo "warden: must be run as root (e.g. sudo warden). Refusing to elevate per-command." >&2
@@ -53,8 +57,10 @@ main_menu_loop() {
             13 "Exit")" || exit 0
 
         case "$choice" in
+            1) feature_install_menu ;;
+            7) feature_status_dashboard ;;
             13) exit 0 ;;
-            *) warden_msg "Not yet implemented" "Menu item ${choice} is not yet implemented (Phase 0 scaffold)." ;;
+            *) warden_msg "Not yet implemented" "Menu item ${choice} is not yet implemented yet." ;;
         esac
     done
 }

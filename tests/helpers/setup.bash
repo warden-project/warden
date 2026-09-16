@@ -18,6 +18,8 @@ warden_test_setup() {
     source "${WARDEN_ROOT}/lib/core/confirm.sh"
     source "${WARDEN_ROOT}/lib/core/backup.sh"
     source "${WARDEN_ROOT}/lib/core/pkg.sh"
+    source "${WARDEN_ROOT}/lib/features/install.sh"
+    source "${WARDEN_ROOT}/lib/features/status.sh"
 
     log_init
 }

@@ -1,0 +1,26 @@
+# Menu 7 — Status dashboard
+
+Read-only. Never changes anything on the system. For every
+`crypto_LUKS` device currently visible to the kernel, shows:
+
+- Device path, LUKS UUID
+- Whether it has a `/etc/crypttab` entry (mapper name) and whether the
+  matching `/etc/fstab` entry exists
+- Whether it's currently unlocked (mapper active)
+- Current Clevis binding(s) (`clevis luks list`), if any and if Clevis
+  is installed
+
+Then, across all devices:
+
+- Live reachability (and latency) of every Tang server referenced by
+  any current binding — there's no separate "trusted servers" list
+  until the binding wizard (menu 3) exists, so this is derived from
+  whatever's actually bound right now
+- `tangd.socket` and `clevis-luks-askpass.path` status, if the
+  relevant package is installed
+- Any Tailscale-ordering systemd drop-ins currently in place
+
+If a device shows as unmanaged (no crypttab entry) or Clevis bindings
+show as "none", that's informational — it's exactly the "wait, is this
+already managed?" situation the enrolment wizard (menu 5, not yet
+built) exists to resolve.

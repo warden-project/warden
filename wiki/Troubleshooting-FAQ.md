@@ -2,7 +2,7 @@
 
 This page grows alongside the feature set — each phase adds the
 failure modes relevant to what it ships. Currently covers Phase 0
-(scaffolding) only.
+(scaffolding) and Phase 1 (install, status dashboard).
 
 ## "warden: must be run as root"
 
@@ -21,6 +21,21 @@ output, and any file diffs from crypttab/fstab edits.
 
 `/var/backups/warden/`, timestamped per file per edit. Nothing is ever
 edited in place without one being taken first.
+
+## The status dashboard says a Tang server is "unreachable" but I can `curl` it fine manually
+
+Check you're testing the exact same URL Warden is: the dashboard tests
+the URL(s) actually embedded in existing Clevis bindings, read from
+`clevis luks list`, not a separately-configured list (menu 3, which
+builds that list, doesn't exist yet). If a binding was made with a
+Tailscale address and you're testing from a machine that isn't on the
+tailnet, that's the expected result, not a bug.
+
+## The status dashboard shows "Clevis bindings: (clevis not installed)"
+
+That's the literal state — no packages are auto-inferred as installed.
+This exact class of "assumed it was there" gap is why `clevis-systemd`
+being missed was a real incident; see [[Lessons Learned]].
 
 ## More FAQ entries land as each feature phase ships.
 
