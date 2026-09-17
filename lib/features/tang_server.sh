@@ -111,14 +111,28 @@ verify_tang_local() {
     fi
 }
 
+# describe_tang_server_status — current tangd.socket configuration/state.
+describe_tang_server_status() {
+    printf 'Configured port: %s\n' "$(configured_tangd_port)"
+    printf 'tangd.socket enabled: %s\n' "$(is_systemd_unit_enabled "$WARDEN_TANGD_SOCKET_UNIT" 2>/dev/null && echo yes || echo no)"
+    printf 'tangd.socket active: %s\n' "$(is_systemd_unit_active "$WARDEN_TANGD_SOCKET_UNIT" 2>/dev/null && echo yes || echo no)"
+    if is_ufw_active; then
+        printf 'ufw: active, port %s allowed: %s\n' "$(configured_tangd_port)" "$(ufw_allows_port "$(configured_tangd_port)" && echo yes || echo no)"
+    else
+        printf 'ufw: not active\n'
+    fi
+}
+
 feature_tang_server_config() {
     if ! is_pkg_installed tang; then
         warden_msg "Tang not installed" "Tang isn't installed on this host yet. Install it from menu 1 first."
         return 0
     fi
 
+    warden_msg "Current status" "$(describe_tang_server_status)"
+
     local port
-    port="$(whiptail --inputbox "Port for the Tang server to listen on:" 10 60 "80" 3>&1 1>&2 2>&3)" || return 0
+    port="$(whiptail --inputbox "Port for the Tang server to listen on:" 10 60 "$(configured_tangd_port)" 3>&1 1>&2 2>&3)" || return 0
     if ! is_valid_port "$port"; then
         warden_msg "Invalid port" "'${port}' isn't a valid port number (1-65535)."
         return 0

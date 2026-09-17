@@ -133,3 +133,36 @@ EOF
     PATH="${TEST_TMPDIR}/bin:${PATH}" run verify_tang_local 7500
     [ "$output" = "failed" ]
 }
+
+@test "describe_tang_server_status reports the configured port" {
+    mkdir -p "$(_tangd_dropin_dir)"
+    printf '[Socket]\nListenStream=\nListenStream=7500\n' > "$(_tangd_dropin_file)"
+    local out
+    out="$(describe_tang_server_status)"
+    [[ "$out" == *"Configured port: 7500"* ]]
+}
+
+@test "describe_tang_server_status reports ufw as not active without a usable ufw" {
+    # On this machine ufw exists but refuses to run unprivileged, which
+    # is_ufw_active already treats as "not active" -- no need to hide
+    # the binary, and doing so via PATH would break every other tool
+    # (mktemp, systemctl, ...) this function's callees also need.
+    local out
+    out="$(describe_tang_server_status)"
+    [[ "$out" == *"ufw: not active"* ]]
+}
+
+@test "describe_tang_server_status shows the ufw rule state when ufw is active" {
+    mkdir -p "${TEST_TMPDIR}/bin"
+    cat > "${TEST_TMPDIR}/bin/ufw" <<'EOF'
+#!/usr/bin/env bash
+echo "Status: active"
+echo "7500/tcp                   ALLOW       Anywhere"
+EOF
+    chmod +x "${TEST_TMPDIR}/bin/ufw"
+    mkdir -p "$(_tangd_dropin_dir)"
+    printf '[Socket]\nListenStream=\nListenStream=7500\n' > "$(_tangd_dropin_file)"
+    local out
+    out="$(PATH="${TEST_TMPDIR}/bin:${PATH}" describe_tang_server_status)"
+    [[ "$out" == *"ufw: active, port 7500 allowed: yes"* ]]
+}

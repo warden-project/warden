@@ -16,6 +16,19 @@ readonly WARDEN_INSTALL_REMINDER="Tang -- the server component. Runs on a machin
 
 Clevis -- the client component. Installed on each machine that has an encrypted drive. Binds a LUKS volume to one or more Tang servers (or a TPM2 chip), and unlocks it automatically at boot as long as it can complete that exchange."
 
+# describe_install_status — current install state of every package
+# this menu manages, one line per package.
+describe_install_status() {
+    local pkg
+    for pkg in tang clevis clevis-luks clevis-systemd clevis-tpm2; do
+        if is_pkg_installed "$pkg"; then
+            printf '  %s: installed\n' "$pkg"
+        else
+            printf '  %s: not installed\n' "$pkg"
+        fi
+    done
+}
+
 # install_selected <choice> <install_tpm2:0|1>
 # choice is one of: tang, clevis, both
 install_selected() {
@@ -40,6 +53,7 @@ install_selected() {
 }
 
 feature_install_menu() {
+    warden_msg "Current install status" "$(describe_install_status)"
     warden_msg "Tang / Clevis -- what they do" "$WARDEN_INSTALL_REMINDER"
 
     local choice

@@ -1,7 +1,8 @@
 # Menu 1 — Install components
 
-Installs Tang, Clevis, or both. Shows a plain-language reminder of what
-each component does before asking.
+Installs Tang, Clevis, or both. Shows current install status for every
+package this menu manages first, then a plain-language reminder of
+what each component does, before asking what to install.
 
 - **Tang only** — installs `tang`.
 - **Clevis only** — installs `clevis clevis-luks clevis-systemd` (all

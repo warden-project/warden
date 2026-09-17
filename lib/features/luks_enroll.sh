@@ -145,9 +145,12 @@ complete_enrolment() {
         fstab_line="$(build_fstab_line "$mapper" "$mountpoint" "$fstype")"
     fi
 
+    local trust_summary
+    trust_summary="$(describe_saved_bindings "$(load_bindings_config)")"
+
     local preview="This will:\n\n- Add to ${WARDEN_CRYPTTAB}:\n  ${crypttab_line}\n"
     [[ -n "${fstab_line:-}" ]] && preview+="\n- Add to ${WARDEN_FSTAB}:\n  ${fstab_line}\n"
-    preview+="\n- Bind Clevis (${pin_type} pin) to ${dev}\n- Test-unlock and clean up the test mapping"
+    preview+="\n- Bind Clevis to ${dev} using:\n${trust_summary}\n- Test-unlock and clean up the test mapping"
 
     if warden_yesno "Preview" "${preview}\n\nShow this as a dry-run first (no changes made)?"; then
         local saved_dry_run="${WARDEN_DRY_RUN}"

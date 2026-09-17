@@ -20,9 +20,10 @@ configuration (menu 3) first.
 6. Runs `cryptsetup luksFormat`, opens the device to create the
    filesystem, then closes it again.
 7. Hands off directly into the same enrolment logic menu 5 uses —
-   mapper name, mountpoint, crypttab/fstab, Clevis bind, test-unlock —
-   using the UUID just created and the passphrase just set, so you
-   don't re-enter either.
+   mapper name, mountpoint, crypttab/fstab, a preview showing the
+   trust configuration it's about to bind against, Clevis bind,
+   test-unlock — using the UUID just created and the passphrase just
+   set, so you don't re-enter either.
 
 The recovery passphrase is piped to `cryptsetup` on stdin, never passed
 as a command-line argument or written to the session log — only the

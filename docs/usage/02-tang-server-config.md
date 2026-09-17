@@ -3,8 +3,11 @@
 Only available once Tang is installed (menu 1). Configures the local
 `tangd.socket` unit:
 
-- Asks for a port (suggests `80`, but any valid port 1-65535 is
-  accepted).
+- Shows current status first: configured port, whether the unit is
+  enabled/active, and ufw's rule state if ufw is active.
+- Asks for a port, defaulting to whatever's actually configured right
+  now (not a hardcoded suggestion) — any valid port 1-65535 is
+  accepted.
 - Writes the port as a `[Socket]` drop-in at
   `/etc/systemd/system/tangd.socket.d/override.conf` — the same result
   `systemctl edit tangd.socket` would produce, but as a plain file

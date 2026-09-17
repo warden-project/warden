@@ -13,9 +13,21 @@
 
 : "${WARDEN_ASKPASS_PATH_UNIT:=clevis-luks-askpass.path}"
 
+# describe_lateboot_status — current enabled/active state of the
+# late-boot unlocker unit, shown before offering to change anything.
+describe_lateboot_status() {
+    printf 'clevis-systemd: installed\n'
+    printf '%s enabled: %s\n' "$WARDEN_ASKPASS_PATH_UNIT" "$(is_systemd_unit_enabled "$WARDEN_ASKPASS_PATH_UNIT" 2>/dev/null && echo yes || echo no)"
+    printf '%s state: %s\n' "$WARDEN_ASKPASS_PATH_UNIT" "$(unit_state "$WARDEN_ASKPASS_PATH_UNIT")"
+}
+
 feature_lateboot_menu() {
     if ! is_pkg_installed clevis-systemd; then
         warden_msg "clevis-systemd not installed" "clevis-systemd isn't installed. Without it, nothing listens for the boot-time password request, so Clevis bindings will not unlock automatically at boot even if everything else is configured correctly.\n\nInstall it from menu 1 first."
+        return 0
+    fi
+
+    if ! warden_yesno "Current status" "$(describe_lateboot_status)\n\nEnsure it's enabled and re-check status now?"; then
         return 0
     fi
 

@@ -8,6 +8,9 @@ Lessons Learned page.
 
 - If `clevis-systemd` isn't installed, stops and tells you to install
   it from menu 1 — it does not proceed on an assumption.
+- Shows the unit's current enabled/active state and asks before
+  changing anything, rather than enabling it unconditionally the
+  moment you open this menu.
 - Enables `clevis-luks-askpass.path` (idempotent — skipped if already
   enabled).
 - Reports the unit's actual current state (`active` vs. anything else)

@@ -19,8 +19,10 @@ saved trust configuration (menu 3) first.
    mode-600 temporary file, passed to `clevis luks bind -k`, and
    shredded immediately after — never passed as a command-line
    argument or logged.
-5. Shows a preview of the exact crypttab/fstab lines and the bind
-   command, with the usual dry-run option.
+5. Shows a preview of the exact crypttab/fstab lines and a summary of
+   the trust configuration it's about to bind against (pin type,
+   threshold, every address) — not just that a config exists, but
+   what's actually in it — with the usual dry-run option.
 6. Backs up crypttab/fstab before appending (never regenerated
    wholesale), binds Clevis using the saved trust configuration, then
    immediately does a test-unlock into a throwaway mapper name and

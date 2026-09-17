@@ -30,3 +30,18 @@ teardown() { warden_test_teardown; }
     WARDEN_DRY_RUN=1 install_selected clevis 1
     grep -q "clevis-tpm2" "$WARDEN_LOG_FILE"
 }
+
+@test "describe_install_status reports a line for every managed package" {
+    local out
+    out="$(describe_install_status)"
+    for pkg in tang clevis clevis-luks clevis-systemd clevis-tpm2; do
+        echo "$out" | grep -qE "^  ${pkg}: (installed|not installed)$"
+    done
+}
+
+@test "describe_install_status reflects real dpkg state for tang" {
+    local out expected
+    out="$(describe_install_status)"
+    if is_pkg_installed tang; then expected="  tang: installed"; else expected="  tang: not installed"; fi
+    echo "$out" | grep -qxF "$expected"
+}
