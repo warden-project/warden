@@ -86,6 +86,19 @@ didn't succeed — usually a Tang reachability problem, not device
 corruption. Check the Tang server status on the dashboard (menu 7) and
 the session log before rebooting anything relying on this binding.
 
+## Why doesn't CI run the test suite, only shellcheck?
+
+The only Forgejo runner registered on this instance is the shared dev
+host itself (labeled `vm-host`), running as a non-root
+`forgejo-runner` user — not an ephemeral or containerized runner.
+Running the bats suite there would mean every push installs
+`tang`/`clevis`/`clevis-luks` and runs real `cryptsetup`/`losetup`
+directly against that shared machine, which is a different risk
+profile than the disposable-sandbox testing this project is built
+around. CI is scoped to `shellcheck` only for that reason; run
+`bats tests/bats/` as root locally, or on a dedicated disposable test
+VM, to exercise the root-gated tests for real.
+
 ## More FAQ entries land as each feature phase ships.
 
 See the repository README for current phase status, and
