@@ -50,12 +50,12 @@ fi
 
 log_init
 
-MENU_TEXT=$'Day 0 -- Initial setup\n1) Install components\n2) Configure Tang server\n3) Tang servers to trust (bindings)\n\nDay 1 -- Ongoing configuration\n4) LUKS setup wizard\n5) LUKS enrolment wizard\n6) Enable/verify late-boot unlocker\n7) Status dashboard\n\nMaintenance\n8) Add/remove/rotate a binding\n9) Backup LUKS header(s)\n10) Rotate Tang server keys\n\nDANGER ZONE\n11) Erase LUKS header\n\n12) Uninstall / revert\n13) Exit'
+MENU_TEXT="Day 0 / Day 1 / Maintenance / Danger Zone -- select an option:"
 
 main_menu_loop() {
     local choice
     while true; do
-        choice="$(warden_menu "Warden -- NBDE Management" "$MENU_TEXT" \
+        choice="$(whiptail --title "Warden -- NBDE Management" --cancel-button "Exit" --menu "$MENU_TEXT" 24 78 15 \
             1 "Install components (Tang / Clevis / both)" \
             2 "Configure Tang server" \
             3 "Tang servers to trust (bindings)" \
@@ -68,7 +68,8 @@ main_menu_loop() {
             10 "Rotate Tang server keys" \
             11 "DANGER ZONE: Erase LUKS header" \
             12 "Uninstall / revert" \
-            13 "Exit")" || exit 0
+            13 "Exit" \
+            3>&1 1>&2 2>&3)" || exit 0
 
         case "$choice" in
             1) feature_install_menu ;;
