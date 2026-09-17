@@ -5,23 +5,21 @@ on:
     branches: [main]
   pull_request:
 
+# The only runner registered on this Forgejo instance is "vm-host": the
+# shared dev VM itself, running as the non-root "forgejo-runner" user,
+# not an ephemeral/containerized runner. That makes it safe only for
+# read-only linting -- not for installing packages or running the bats
+# suite (loop devices, real cryptsetup/losetup, systemctl calls), which
+# would otherwise run directly against this shared host on every push.
+#
+# Full test execution (bats tests/bats/, including the root-gated
+# loop-device/systemd tests) stays a manual/local step, run either on a
+# developer machine or on the dedicated disposable test VM, rather than
+# in CI here.
 jobs:
   shellcheck:
-    runs-on: ubuntu-latest
+    runs-on: vm-host
     steps:
       - uses: actions/checkout@v4
-      - name: Install shellcheck
-        run: apt-get update && apt-get install -y shellcheck
       - name: Lint
         run: shellcheck -x bin/warden lib/core/*.sh lib/tui/*.sh lib/features/*.sh
-
-  bats:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install bats and test dependencies
-        run: |
-          apt-get update
-          apt-get install -y bats cryptsetup util-linux curl tang clevis clevis-luks python3
-      - name: Run test suite as root (needed for losetup/cryptsetup/systemctl)
-        run: bats tests/bats/

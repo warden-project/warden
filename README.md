@@ -119,8 +119,14 @@ The test suite runs against loop-device-backed sparse image files
 bats tests/bats/
 ```
 
-Some tests require root (anything that actually formats a loop device)
-and are skipped otherwise. CI runs the full suite as root.
+Some tests require root (anything that actually formats a loop device
+or reloads systemd units) and are skipped otherwise. CI only runs
+`shellcheck` — the one Forgejo runner available is this shared dev host
+itself, not an ephemeral/containerized one, so it isn't a safe place to
+install packages or run the bats suite (real loop devices, real
+`cryptsetup`) against. Run `bats tests/bats/` as root locally, or on a
+dedicated disposable test VM, to exercise the root-gated tests for
+real.
 
 ## Documentation
 
