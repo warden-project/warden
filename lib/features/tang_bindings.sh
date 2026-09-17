@@ -159,7 +159,11 @@ save_bindings_config() {
     fi
     local before after
     before="$(mktemp)"; after="$(mktemp)"
-    [[ -f "$WARDEN_BINDINGS_FILE" ]] && cp -p "$WARDEN_BINDINGS_FILE" "$before" || : > "$before"
+    if [[ -f "$WARDEN_BINDINGS_FILE" ]]; then
+        cp -p "$WARDEN_BINDINGS_FILE" "$before"
+    else
+        : > "$before"
+    fi
     printf '%s\n' "$json" > "$WARDEN_BINDINGS_FILE"
     cp -p "$WARDEN_BINDINGS_FILE" "$after"
     log_diff "$WARDEN_BINDINGS_FILE" "$before" "$after"

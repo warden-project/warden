@@ -70,7 +70,11 @@ ensure_tangd_port() {
     fi
     local before after
     before="$(mktemp)"; after="$(mktemp)"
-    [[ -f "$file" ]] && cp -p "$file" "$before" || : > "$before"
+    if [[ -f "$file" ]]; then
+        cp -p "$file" "$before"
+    else
+        : > "$before"
+    fi
     _tangd_dropin_content "$port" > "$file"
     cp -p "$file" "$after"
     log_diff "$file" "$before" "$after"

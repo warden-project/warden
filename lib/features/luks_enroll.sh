@@ -63,7 +63,11 @@ ensure_tailscale_ordering_dropin() {
     [[ -f "$file" ]] && backup_file "$file" >/dev/null
     local before after
     before="$(mktemp)"; after="$(mktemp)"
-    [[ -f "$file" ]] && cp -p "$file" "$before" || : > "$before"
+    if [[ -f "$file" ]]; then
+        cp -p "$file" "$before"
+    else
+        : > "$before"
+    fi
     _tailscale_dropin_content > "$file"
     cp -p "$file" "$after"
     log_diff "$file" "$before" "$after"
