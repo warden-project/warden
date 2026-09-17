@@ -22,7 +22,8 @@ configuration (menu 3) first.
 7. Hands off directly into the same enrolment logic menu 5 uses —
    mapper name, mountpoint, crypttab/fstab, a preview showing the
    trust configuration it's about to bind against, Clevis bind,
-   test-unlock — using the UUID just created and the passphrase just
+   test-unlock, and (if applicable) the Tailscale ordering drop-in —
+   using the UUID just created and the passphrase just
    set, so you don't re-enter either.
 
 The recovery passphrase is piped to `cryptsetup` on stdin, never passed

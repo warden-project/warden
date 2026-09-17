@@ -12,6 +12,66 @@
 : "${WARDEN_CRYPTTAB:=/etc/crypttab}"
 : "${WARDEN_FSTAB:=/etc/fstab}"
 
+# trust_config_has_tailscale <json> — true if any address in a saved
+# tang-bindings.json config is Tailscale-flagged.
+trust_config_has_tailscale() {
+    local json="$1"
+    python3 -c '
+import json, sys
+data = json.loads(sys.argv[1])
+sys.exit(0 if any(a.get("is_tailscale") for a in data.get("addresses", [])) else 1)
+' "$json"
+}
+
+# cryptsetup_dropin_dir <mapper> — the (systemd-escaped) drop-in
+# directory for this mapper's systemd-cryptsetup@ unit.
+cryptsetup_dropin_dir() {
+    local mapper="$1" unit
+    unit="$(systemd-escape --template=systemd-cryptsetup@.service "$mapper")"
+    printf '%s/%s.d' "${WARDEN_SYSTEMD_SYSTEM_DIR:-/etc/systemd/system}" "$unit"
+}
+
+_tailscale_dropin_content() {
+    printf '[Unit]\nAfter=tailscale-online.target\nWants=tailscale-online.target\n'
+}
+
+# ensure_tailscale_ordering_dropin <mapper> — idempotent: no-op if
+# already present with this exact content.
+#
+# Why this exists: network-online.target only means basic networking
+# is up, not that Tailscale has finished connecting, and ordering
+# against tailscaled.service alone isn't reliable either -- a Clevis
+# unlock attempt against a Tailscale-only Tang address can run before
+# the tailnet is actually usable without this. See the wiki.
+ensure_tailscale_ordering_dropin() {
+    local mapper="$1" dir file
+    dir="$(cryptsetup_dropin_dir "$mapper")"
+    file="${dir}/override.conf"
+
+    if [[ -f "$file" ]] && [[ "$(cat "$file")" == "$(_tailscale_dropin_content)" ]]; then
+        log_line "TAILSCALE-DROPIN: already present for ${mapper}, skipping"
+        return 0
+    fi
+
+    if [[ "${WARDEN_DRY_RUN}" == "1" ]]; then
+        log_line "[DRY-RUN] would write ${file}"
+        printf '[DRY-RUN] would write %s:\n%s\n' "$file" "$(_tailscale_dropin_content)" >&2
+        return 0
+    fi
+
+    mkdir -p "$dir"
+    [[ -f "$file" ]] && backup_file "$file" >/dev/null
+    local before after
+    before="$(mktemp)"; after="$(mktemp)"
+    [[ -f "$file" ]] && cp -p "$file" "$before" || : > "$before"
+    _tailscale_dropin_content > "$file"
+    cp -p "$file" "$after"
+    log_diff "$file" "$before" "$after"
+    rm -f "$before" "$after"
+
+    run_cmd "reload systemd units" -- systemctl daemon-reload
+}
+
 # unmanaged_luks_devices — "<devpath> <uuid>" pairs for crypto_LUKS
 # devices that have no /etc/crypttab entry AND do not back root/boot/efi.
 unmanaged_luks_devices() {
@@ -145,12 +205,19 @@ complete_enrolment() {
         fstab_line="$(build_fstab_line "$mapper" "$mountpoint" "$fstype")"
     fi
 
-    local trust_summary
-    trust_summary="$(describe_saved_bindings "$(load_bindings_config)")"
+    local saved_config trust_summary needs_tailscale_dropin=0
+    saved_config="$(load_bindings_config)"
+    trust_summary="$(describe_saved_bindings "$saved_config")"
+    if trust_config_has_tailscale "$saved_config"; then
+        needs_tailscale_dropin=1
+    fi
 
     local preview="This will:\n\n- Add to ${WARDEN_CRYPTTAB}:\n  ${crypttab_line}\n"
     [[ -n "${fstab_line:-}" ]] && preview+="\n- Add to ${WARDEN_FSTAB}:\n  ${fstab_line}\n"
     preview+="\n- Bind Clevis to ${dev} using:\n${trust_summary}\n- Test-unlock and clean up the test mapping"
+    if [[ "$needs_tailscale_dropin" == "1" ]]; then
+        preview+="\n- Add a systemd ordering drop-in so this device's unlock waits for Tailscale (one of the trusted addresses is a Tailscale address)"
+    fi
 
     if warden_yesno "Preview" "${preview}\n\nShow this as a dry-run first (no changes made)?"; then
         local saved_dry_run="${WARDEN_DRY_RUN}"
@@ -164,6 +231,7 @@ complete_enrolment() {
 
     append_line_if_missing "$WARDEN_CRYPTTAB" "$crypttab_line"
     [[ -n "${fstab_line:-}" ]] && append_line_if_missing "$WARDEN_FSTAB" "$fstab_line"
+    [[ "$needs_tailscale_dropin" == "1" ]] && ensure_tailscale_ordering_dropin "$mapper"
 
     if ! run_clevis_luks_bind "$dev" "$passphrase" "$pin_type" "$pin_config" >/dev/null; then
         warden_msg "Bind failed" "clevis luks bind did not succeed. Check the session log at ${WARDEN_LOG_FILE}. The crypttab/fstab entries were still added -- remove them manually if you're abandoning this device."
@@ -173,7 +241,9 @@ complete_enrolment() {
     local unlock_result
     unlock_result="$(test_unlock_and_cleanup "$dev")"
     if [[ "$unlock_result" == "ok" ]]; then
-        warden_msg "Enrolment complete" "${dev} is bound and crypttab/fstab are updated. The test-unlock succeeded, so this should unlock automatically at boot once the late-boot unlocker (menu 6) is enabled."
+        local msg="${dev} is bound and crypttab/fstab are updated. The test-unlock succeeded, so this should unlock automatically at boot once the late-boot unlocker (menu 6) is enabled."
+        [[ "$needs_tailscale_dropin" == "1" ]] && msg+="\n\nA systemd ordering drop-in was also added so unlock waits for Tailscale to be up, not just basic networking."
+        warden_msg "Enrolment complete" "$msg"
     else
         warden_msg "Bind succeeded, but test-unlock failed" "The Clevis binding was added, but the test-unlock did not succeed. Do not reboot relying on this yet -- check network/Tang reachability and the session log at ${WARDEN_LOG_FILE}."
     fi

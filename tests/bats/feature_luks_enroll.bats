@@ -6,6 +6,8 @@ setup() {
     warden_test_setup
     export WARDEN_STATE_DIR="${TEST_TMPDIR}/warden-state"
     export WARDEN_BINDINGS_FILE="${WARDEN_STATE_DIR}/tang-bindings.json"
+    export WARDEN_SYSTEMD_SYSTEM_DIR="${TEST_TMPDIR}/systemd"
+    mkdir -p "$WARDEN_SYSTEMD_SYSTEM_DIR"
 }
 teardown() { warden_test_teardown; }
 
@@ -149,4 +151,49 @@ EOF
     # output ahead of the final ok/failed line -- check the last line,
     # not the whole multi-line $output.
     [ "${lines[-1]}" = "failed" ]
+}
+
+@test "trust_config_has_tailscale is true when any address is flagged" {
+    trust_config_has_tailscale '{"addresses":[{"url":"http://a","is_tailscale":false},{"url":"http://b","is_tailscale":true}]}'
+}
+
+@test "trust_config_has_tailscale is false when no address is flagged" {
+    run trust_config_has_tailscale '{"addresses":[{"url":"http://a","is_tailscale":false}]}'
+    [ "$status" -ne 0 ]
+}
+
+@test "trust_config_has_tailscale is false for an empty addresses list" {
+    run trust_config_has_tailscale '{"addresses":[]}'
+    [ "$status" -ne 0 ]
+}
+
+@test "cryptsetup_dropin_dir systemd-escapes a mapper name with a hyphen" {
+    local out
+    out="$(cryptsetup_dropin_dir "data-disk")"
+    [[ "$out" == *'systemd-cryptsetup@data\x2ddisk.service.d' ]]
+}
+
+@test "ensure_tailscale_ordering_dropin in dry-run mode does not write the file" {
+    WARDEN_DRY_RUN=1 ensure_tailscale_ordering_dropin "data-disk"
+    [ ! -d "$(cryptsetup_dropin_dir data-disk)" ]
+    grep -q "DRY-RUN" "$WARDEN_LOG_FILE"
+}
+
+@test "ensure_tailscale_ordering_dropin writes the expected unit ordering" {
+    if [ "$(id -u)" -ne 0 ]; then
+        skip "requires root for systemctl daemon-reload"
+    fi
+    WARDEN_DRY_RUN=0 ensure_tailscale_ordering_dropin "data-disk"
+    local file="$(cryptsetup_dropin_dir data-disk)/override.conf"
+    grep -qx "After=tailscale-online.target" "$file"
+    grep -qx "Wants=tailscale-online.target" "$file"
+}
+
+@test "ensure_tailscale_ordering_dropin is idempotent: second call is a no-op" {
+    if [ "$(id -u)" -ne 0 ]; then
+        skip "requires root for systemctl daemon-reload"
+    fi
+    WARDEN_DRY_RUN=0 ensure_tailscale_ordering_dropin "data-disk"
+    WARDEN_DRY_RUN=0 ensure_tailscale_ordering_dropin "data-disk"
+    grep -q "already present for data-disk, skipping" "$WARDEN_LOG_FILE"
 }

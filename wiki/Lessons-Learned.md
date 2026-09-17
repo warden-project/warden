@@ -57,4 +57,6 @@ running before the tailnet handshake completes. A Clevis unlock attempt
 against a Tailscale-only Tang address can therefore run before the
 tailnet is actually usable. Warden adds a `tailscale-online.target`
 ordering drop-in on the relevant `systemd-cryptsetup@` unit whenever a
-bound address is confirmed to be on the tailnet. See [[NBDE Explained]].
+bound address is confirmed to be on the tailnet, applied by the LUKS
+setup/enrolment wizards (menus 4/5) once they know which device's
+mapper it applies to — see [[NBDE Explained]].

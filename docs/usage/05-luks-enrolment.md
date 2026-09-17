@@ -28,3 +28,10 @@ saved trust configuration (menu 3) first.
    immediately does a test-unlock into a throwaway mapper name and
    cleans it up — so you find out now whether it actually works,
    rather than at the next reboot.
+7. If any address in the trust configuration is Tailscale-flagged,
+   also adds a `systemd-cryptsetup@<mapper>.service.d` drop-in ordering
+   this device's unlock after `tailscale-online.target` — idempotent,
+   backed up before any change, using the properly systemd-escaped
+   unit name for the mapper. See the wiki's "Tailscale ordering gap"
+   entry (Lessons Learned) for why this matters: `network-online.target`
+   alone doesn't guarantee the tailnet is actually reachable yet.

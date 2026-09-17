@@ -55,11 +55,11 @@ device.
 8. Shows you the built config, then saves it (with the previous version
    backed up first) to `/etc/warden/tang-bindings.json`.
 
-## What this does *not* do yet
+## What this does *not* do
 
 The Tailscale `systemd-cryptsetup@<mapper>.service` ordering drop-in
 described for Tailscale-flagged addresses is **not** created here — it
 targets a specific device's mapper unit, and no device has been chosen
 at this stage. Whether an address is Tailscale-flagged is saved in the
-config; the enrolment wizard will offer the drop-in once it knows which
-device/mapper it applies to.
+config; menus 4/5 create the drop-in automatically once they know
+which device/mapper it applies to (see their docs).
