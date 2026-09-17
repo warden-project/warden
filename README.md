@@ -15,23 +15,24 @@ native systemd service, that is in scope.
 
 ## Status
 
-**Phase 4 complete.** Core safety primitives (logging, dry-run-aware
+**Phase 5 in progress.** Core safety primitives (logging, dry-run-aware
 command execution, device/UUID resolution, the root/boot/EFI guard,
 typed confirmation, backup-before-edit) are in place and tested. Every
-Day 0/Day 1 menu item plus Maintenance is now implemented: install (1),
-Tang server config (2), Tang bindings/SSS/Tailscale (3), the LUKS setup
+menu except Uninstall/revert is now implemented: install (1), Tang
+server config (2), Tang bindings/SSS/Tailscale (3), the LUKS setup
 wizard (4), the LUKS enrolment wizard (5), the late-boot unlocker (6),
 the status dashboard (7), add/remove/rotate a binding (8), LUKS header
-backup (9), and Tang server key rotation (10). Menus 4 and 5 are the
-first destructive-capable paths in the tool — both route through the
-same `confirm_destructive_device_action` guard (lsblk display,
-root/boot/efi refusal with override, typed confirmation) built in
-Phase 0; menu 8's rotate action follows the same bind-verify-then-
-unbind sequencing.
+backup (9), Tang server key rotation (10), and the Danger Zone's
+cryptographic erase (11). Menus 4, 5, and 11 route through the same
+`confirm_destructive_device_action` guard (lsblk display, root/boot/efi
+refusal with override, typed confirmation) built in Phase 0 — 11 wraps
+it in the Danger Zone's distinct visual banner and is the single most
+irreversible action in the tool; menu 8's rotate action follows the
+same bind-verify-then-unbind sequencing.
 
-The Danger Zone (menu 11) and uninstall/revert (menu 12) are not yet
-built — deliberately last and isolated, given they're the highest-risk
-remaining pieces. Root-drive unlock (`clevis-initramfs`) remains
+Uninstall/revert (menu 12) is the one remaining piece, and must be
+structurally unreachable from the Danger Zone's erase flow, not just
+conventionally separate. Root-drive unlock (`clevis-initramfs`) remains
 deliberately deferred. See the wiki for the full roadmap.
 
 ## Prerequisites

@@ -27,3 +27,16 @@ danger_msg() {
     local text="$1"
     whiptail --title "!!! DANGER ZONE !!!" --backtitle "WARDEN - IRREVERSIBLE ACTION" --msgbox "$text" 18 78
 }
+
+danger_yesno() {
+    local text="$1"
+    whiptail --title "!!! DANGER ZONE !!!" --backtitle "WARDEN - IRREVERSIBLE ACTION" --yesno "$text" 14 78
+}
+
+danger_textbox() {
+    local file="$1"
+    whiptail --title "!!! DANGER ZONE !!!" --backtitle "WARDEN - IRREVERSIBLE ACTION" --scrolltext --textbox "$file" 24 100
+}
+
+# shellcheck disable=SC2034  # used by lib/features/danger_erase.sh to pass into confirm_destructive_device_action's backtitle
+readonly WARDEN_DANGER_BACKTITLE="WARDEN - IRREVERSIBLE ACTION"

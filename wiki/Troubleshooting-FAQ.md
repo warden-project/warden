@@ -2,10 +2,9 @@
 
 This page grows alongside the feature set — each phase adds the
 failure modes relevant to what it ships. Currently covers Phase 0
-(scaffolding) and Phase 4 (install, Tang server config, Tang
-bindings/SSS/Tailscale, the LUKS wizards, the late-boot unlocker,
-status dashboard, and Maintenance: binding rotation, header backup,
-Tang key rotation).
+(scaffolding) through Phase 5's Danger Zone (install, Tang server
+config, Tang bindings/SSS/Tailscale, the LUKS wizards, the late-boot
+unlocker, status dashboard, Maintenance, and the cryptographic erase).
 
 ## "warden: must be run as root"
 
@@ -130,6 +129,18 @@ a real Ubuntu `tang` package install yet. If your install has it
 somewhere else, set `WARDEN_TANGD_ROTATE_KEYS_CANDIDATES` (space
 separated paths) rather than Warden guessing at reimplementing key
 rotation by hand.
+
+## Why is the Danger Zone's erase confirmation still just an 8-character fragment, not the full UUID?
+
+This was discussed explicitly during design: a full 36-character UUID
+is long enough that people tend to paste it from the screen without
+re-reading it, which defeats the point. An 8-character fragment read
+directly off the device identifier shown at that exact moment achieves
+the same goal (can't be given from memory or habit for the wrong
+device) without being onerous enough to invite blind copy-paste. The
+root/boot/efi override step — a distinct, rarer situation — still uses
+the full identifier, since overriding a safety refusal is meant to be
+a deliberately harder bar than a normal destructive confirmation.
 
 ## More FAQ entries land as each feature phase ships.
 

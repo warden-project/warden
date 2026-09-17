@@ -12,22 +12,26 @@ Tang and Clevis — on Ubuntu Server hosts.
 
 ## Status
 
-Phase 4 is complete: every Day 0/Day 1 menu item plus Maintenance is
+Phase 5 is under way: every menu except Uninstall/revert (12) is now
 implemented -- install (1), Tang server config (2), Tang
 bindings/SSS/Tailscale (3), LUKS setup (4), LUKS enrolment (5), the
 late-boot unlocker (6), the status dashboard (7), add/remove/rotate a
-binding (8), LUKS header backup (9), and Tang server key rotation
-(10). Menus 4 and 5 route through the same destructive-confirmation
-guard built in Phase 0 (lsblk display, root/boot/efi refusal with a
-typed override, then a typed `<ACTION> <fragment>` confirmation); menu
-8's rotate action uses the same bind-verify-then-unbind sequencing so
-a binding is never replaced with an unproven one.
+binding (8), LUKS header backup (9), Tang server key rotation (10),
+and the Danger Zone's cryptographic erase (11). Menus 4, 5, and 11
+route through the same destructive-confirmation guard built in
+Phase 0 (lsblk display, root/boot/efi refusal with a typed override,
+then a typed `<ACTION> <fragment>` confirmation) -- 11 additionally
+wraps the whole flow in the Danger Zone's distinct visual banner, and
+uses the harder `ERASE <fragment>` bar for the single most
+irreversible action in the tool. Menu 8's rotate action uses the same
+bind-verify-then-unbind sequencing so a binding is never replaced with
+an unproven one.
 
-The Danger Zone (menu 11) and uninstall/revert (menu 12) are not yet
-built -- deliberately last and isolated, as the highest-risk remaining
-pieces. Root-drive unlock (`clevis-initramfs`) remains deliberately
-deferred -- see [[Lessons Learned]]. See the repository README for the
-phase roadmap.
+Uninstall/revert (menu 12) is the one remaining piece, and must be
+structurally unreachable from the Danger Zone's erase flow, not just
+conventionally separate. Root-drive unlock (`clevis-initramfs`)
+remains deliberately deferred -- see [[Lessons Learned]]. See the
+repository README for the phase roadmap.
 
 ## Scope
 

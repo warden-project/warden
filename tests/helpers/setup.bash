@@ -30,6 +30,7 @@ warden_test_setup() {
     source "${WARDEN_ROOT}/lib/features/binding_rotate.sh"
     source "${WARDEN_ROOT}/lib/features/header_backup.sh"
     source "${WARDEN_ROOT}/lib/features/tang_rotate.sh"
+    source "${WARDEN_ROOT}/lib/features/danger_erase.sh"
 
     log_init
 }
