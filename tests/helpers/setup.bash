@@ -39,3 +39,17 @@ warden_test_setup() {
 warden_test_teardown() {
     rm -rf "${TEST_TMPDIR}"
 }
+
+# warden_test_luks_format <dev> <passphrase> — for tests that need a
+# real LUKS device but aren't testing format_luks_device itself, so
+# they call cryptsetup directly rather than through the product code.
+# Confirmed on real hardware: lsblk/blkid's cached view of a device
+# can briefly lag behind cryptsetup succeeding, so any test that reads
+# the device's UUID/FSTYPE right after formatting needs the same
+# udevadm settle format_luks_device itself does -- otherwise the test
+# is flaky (passes or fails depending on timing), not deterministic.
+warden_test_luks_format() {
+    local dev="$1" passphrase="$2"
+    printf '%s' "$passphrase" | cryptsetup luksFormat --batch-mode "$dev" -
+    udevadm settle
+}

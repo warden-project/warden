@@ -59,7 +59,7 @@ teardown() { warden_test_teardown; }
     img="${TEST_TMPDIR}/disk.img"
     truncate -s 64M "$img"
     loopdev="$(losetup -f --show "$img")"
-    echo -n "testpassphrase" | cryptsetup luksFormat --batch-mode "$loopdev" -
+    warden_test_luks_format "$loopdev" "testpassphrase"
     run luks_devices
     [[ "$output" == *"$loopdev"* ]]
     losetup -d "$loopdev"
@@ -73,7 +73,7 @@ teardown() { warden_test_teardown; }
     img="${TEST_TMPDIR}/disk.img"
     truncate -s 64M "$img"
     loopdev="$(losetup -f --show "$img")"
-    echo -n "testpassphrase" | cryptsetup luksFormat --batch-mode "$loopdev" -
+    warden_test_luks_format "$loopdev" "testpassphrase"
     WARDEN_CRYPTTAB="${TEST_TMPDIR}/crypttab"
     : > "$WARDEN_CRYPTTAB"
     run managed_luks_devices
@@ -89,7 +89,7 @@ teardown() { warden_test_teardown; }
     img="${TEST_TMPDIR}/disk.img"
     truncate -s 64M "$img"
     loopdev="$(losetup -f --show "$img")"
-    echo -n "testpassphrase" | cryptsetup luksFormat --batch-mode "$loopdev" -
+    warden_test_luks_format "$loopdev" "testpassphrase"
     uuid="$(uuid_for_device "$loopdev")"
     WARDEN_CRYPTTAB="${TEST_TMPDIR}/crypttab"
     printf 'data-disk UUID=%s none luks,_netdev\n' "$uuid" > "$WARDEN_CRYPTTAB"

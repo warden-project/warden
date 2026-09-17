@@ -26,7 +26,7 @@ teardown() { warden_test_teardown; }
     img="${TEST_TMPDIR}/disk.img"
     truncate -s 64M "$img"
     loopdev="$(losetup -f --show "$img")"
-    echo -n "testpassphrase" | cryptsetup luksFormat --batch-mode "$loopdev" -
+    warden_test_luks_format "$loopdev" "testpassphrase"
     run is_system_critical "$loopdev"
     [ "$status" -eq 1 ]
     losetup -d "$loopdev"

@@ -66,7 +66,7 @@ EOF
     img="${TEST_TMPDIR}/disk.img"
     truncate -s 64M "$img"
     loopdev="$(losetup -f --show "$img")"
-    echo -n "testpassphrase" | cryptsetup luksFormat --batch-mode "$loopdev" -
+    warden_test_luks_format "$loopdev" "testpassphrase"
     uuid="$(uuid_for_device "$loopdev")"
 
     WARDEN_CRYPTTAB="${TEST_TMPDIR}/crypttab"
