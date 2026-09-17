@@ -78,8 +78,61 @@ new_slots() {
     comm -13 <(sort -u <<<"$1") <(sort -u <<<"$2")
 }
 
+# clevis_token_slots <dev> — every keyslot number that has a Clevis
+# token attached, one per line, read directly from cryptsetup's own
+# LUKS2 metadata (`luksDump`) -- a source independent of `clevis luks
+# list`, so a bug or version quirk in one can't silently defeat the
+# other.
+#
+# NOTE: parses cryptsetup's human-readable luksDump text output (there
+# is no machine-readable mode in the cryptsetup versions this was
+# written against). Verify this parsing against a real LUKS2 device
+# with a real Clevis binding on a test host -- not exercised against
+# real cryptsetup output in this development environment.
+clevis_token_slots() {
+    local dev="$1"
+    cryptsetup luksDump "$dev" 2>/dev/null | python3 -c '
+import re, sys
+
+in_tokens = False
+current_type = None
+slots = set()
+for line in sys.stdin:
+    stripped = line.rstrip("\n")
+    if stripped.strip() == "Tokens:":
+        in_tokens = True
+        continue
+    if not in_tokens:
+        continue
+    if stripped and not stripped[0].isspace():
+        break
+    m = re.match(r"\s*\d+:\s*(\S+)", stripped)
+    if m and re.match(r"^\s*\d+:", stripped) and not re.search(r"Keyslot", stripped):
+        current_type = m.group(1)
+        continue
+    m2 = re.search(r"Keyslot:\s*(\d+)", stripped)
+    if m2 and current_type == "clevis":
+        slots.add(int(m2.group(1)))
+
+for s in sorted(slots):
+    print(s)
+'
+}
+
+# slot_has_clevis_token <dev> <slot> — the hard gate every unbind must
+# pass: true only if cryptsetup's own token metadata (not just what
+# the UI happened to display) confirms this slot is Clevis-managed.
+slot_has_clevis_token() {
+    local dev="$1" slot="$2"
+    clevis_token_slots "$dev" | grep -qxF "$slot"
+}
+
 run_clevis_luks_unbind() {
     local dev="$1" slot="$2"
+    if ! slot_has_clevis_token "$dev" "$slot"; then
+        log_line "REFUSED: slot ${slot} on ${dev} has no Clevis token attached -- refusing to unbind a non-Clevis slot (passphrase/keyfile/etc)"
+        return 3
+    fi
     run_cmd "unbind slot ${slot} on ${dev}" -- clevis luks unbind -d "$dev" -s "$slot" -f
 }
 
@@ -167,7 +220,12 @@ binding_action_remove() {
         return 0
     fi
 
-    if ! run_clevis_luks_unbind "$dev" "$slot"; then
+    run_clevis_luks_unbind "$dev" "$slot"
+    local unbind_status=$?
+    if [[ "$unbind_status" -eq 3 ]]; then
+        warden_msg "Refused" "Slot ${slot} on ${dev} has no Clevis token attached according to cryptsetup's own metadata -- this doesn't match a Clevis binding, so Warden refuses to touch it. This should be unreachable (the list above only ever shows Clevis-bound slots), so if you're seeing this, something is inconsistent -- check the session log at ${WARDEN_LOG_FILE} and investigate before doing anything else with this device."
+        return 0
+    elif [[ "$unbind_status" -ne 0 ]]; then
         warden_msg "Unbind failed" "clevis luks unbind did not succeed. Check the session log at ${WARDEN_LOG_FILE}."
         return 0
     fi
@@ -219,11 +277,17 @@ binding_action_rotate() {
         return 0
     fi
 
-    local old_slot
+    local old_slot refused=""
     while IFS= read -r old_slot; do
         [[ -n "$old_slot" ]] || continue
         run_clevis_luks_unbind "$dev" "$old_slot"
+        [[ $? -eq 3 ]] && refused+="${old_slot} "
     done <<<"$before"
+
+    if [[ -n "$refused" ]]; then
+        warden_msg "Some old slots were refused" "Slot(s) ${refused}had no Clevis token attached according to cryptsetup's own metadata and were left untouched -- this should be unreachable, since these came from the same Clevis-sourced list as the new binding. Check the session log at ${WARDEN_LOG_FILE} and investigate before doing anything else with this device.\n\nRemaining bindings on ${dev}:\n\n$(describe_slots "$dev")"
+        return 0
+    fi
 
     warden_msg "Rotation complete" "Final bindings on ${dev}:\n\n$(describe_slots "$dev")"
 }

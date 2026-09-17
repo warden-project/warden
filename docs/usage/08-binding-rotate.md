@@ -23,3 +23,18 @@ by hand; Warden looks them up and displays them.
 
 All three actions require the device's existing LUKS passphrase, since
 Clevis needs an existing key to authorise adding a new one.
+
+## Removal is limited to Clevis-managed slots, structurally
+
+Only bindings visible to `clevis luks list` (i.e. keyslots with a
+Clevis token attached) are ever shown as removable — a bare recovery
+passphrase or keyfile slot has no such token and simply never appears
+in that list. On top of that, before ever running `clevis luks
+unbind`, Warden independently re-checks the target slot against
+`cryptsetup luksDump`'s own token metadata (a second, separate source
+from `clevis luks list`) and refuses outright if that slot doesn't
+have a Clevis token attached. This applies to both the Remove action
+and the old-slot cleanup step of Rotate. In practice this refusal
+should be unreachable — the two safeguards are independent by
+design, so a display bug or Clevis version quirk in one can't quietly
+let a passphrase/keyfile slot slip through the other.

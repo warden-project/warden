@@ -93,8 +93,43 @@ EOF
     [ "$out" = "1" ]
 }
 
-@test "run_clevis_luks_unbind invokes clevis with the expected arguments" {
+# A realistic LUKS2 luksDump fixture: slot 0 is a bare passphrase (no
+# token -- this is what a recovery passphrase or keyfile slot looks
+# like), slots 1 and 2 have clevis tokens attached.
+SAMPLE_LUKSDUMP=$'Keyslots:\n  0: luks2\n\tKey:        512 bits\n  1: luks2\n\tKey:        512 bits\n  2: luks2\n\tKey:        512 bits\nTokens:\n  0: clevis\n\tKeyslot:    1\n  1: clevis\n\tKeyslot:    2\nDigests:\n  0: pbkdf2\n\tKeyslots:   0 1 2'
+
+_stub_cryptsetup_luksdump() {
     mkdir -p "${TEST_TMPDIR}/bin"
+    cat > "${TEST_TMPDIR}/bin/cryptsetup" <<EOF
+#!/usr/bin/env bash
+cat <<'INNER'
+${SAMPLE_LUKSDUMP}
+INNER
+EOF
+    chmod +x "${TEST_TMPDIR}/bin/cryptsetup"
+}
+
+@test "clevis_token_slots reads clevis-covered slots from luksDump, excluding a bare passphrase slot" {
+    _stub_cryptsetup_luksdump
+    local out
+    out="$(PATH="${TEST_TMPDIR}/bin:${PATH}" clevis_token_slots "/dev/fake")"
+    [ "$out" = "$(printf '1\n2')" ]
+    [[ "$out" != *"0"* ]]
+}
+
+@test "slot_has_clevis_token is true for a clevis-covered slot" {
+    _stub_cryptsetup_luksdump
+    PATH="${TEST_TMPDIR}/bin:${PATH}" slot_has_clevis_token "/dev/fake" "1"
+}
+
+@test "slot_has_clevis_token is false for a bare passphrase slot" {
+    _stub_cryptsetup_luksdump
+    run env PATH="${TEST_TMPDIR}/bin:${PATH}" bash -c "source '${WARDEN_ROOT}/lib/features/binding_rotate.sh'; slot_has_clevis_token /dev/fake 0"
+    [ "$status" -ne 0 ]
+}
+
+@test "run_clevis_luks_unbind invokes clevis with the expected arguments for a clevis-covered slot" {
+    _stub_cryptsetup_luksdump
     cat > "${TEST_TMPDIR}/bin/clevis" <<'EOF'
 #!/usr/bin/env bash
 echo "clevis called with: $*"
@@ -106,7 +141,7 @@ EOF
 }
 
 @test "run_clevis_luks_unbind propagates a failure exit status" {
-    mkdir -p "${TEST_TMPDIR}/bin"
+    _stub_cryptsetup_luksdump
     cat > "${TEST_TMPDIR}/bin/clevis" <<'EOF'
 #!/usr/bin/env bash
 exit 1
@@ -114,4 +149,25 @@ EOF
     chmod +x "${TEST_TMPDIR}/bin/clevis"
     PATH="${TEST_TMPDIR}/bin:${PATH}" run run_clevis_luks_unbind "/dev/fake" "2"
     [ "$status" -ne 0 ]
+}
+
+@test "run_clevis_luks_unbind refuses (status 3) a slot with no clevis token, without ever calling clevis" {
+    _stub_cryptsetup_luksdump
+    local marker="${TEST_TMPDIR}/clevis_was_called"
+    cat > "${TEST_TMPDIR}/bin/clevis" <<EOF
+#!/usr/bin/env bash
+touch "${marker}"
+exit 0
+EOF
+    chmod +x "${TEST_TMPDIR}/bin/clevis"
+    PATH="${TEST_TMPDIR}/bin:${PATH}" run run_clevis_luks_unbind "/dev/fake" "0"
+    [ "$status" -eq 3 ]
+    [ ! -f "$marker" ]
+    grep -q "REFUSED: slot 0" "$WARDEN_LOG_FILE"
+}
+
+@test "run_clevis_luks_unbind refuses an entirely nonexistent slot number too" {
+    _stub_cryptsetup_luksdump
+    PATH="${TEST_TMPDIR}/bin:${PATH}" run run_clevis_luks_unbind "/dev/fake" "99"
+    [ "$status" -eq 3 ]
 }

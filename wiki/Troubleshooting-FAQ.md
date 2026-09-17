@@ -100,6 +100,18 @@ around. CI is scoped to `shellcheck` only for that reason; run
 `bats tests/bats/` as root locally, or on a dedicated disposable test
 VM, to exercise the root-gated tests for real.
 
+## Can menu 8 accidentally remove my recovery passphrase or a keyfile slot?
+
+No — by construction, not just by convention. The Remove and Rotate
+actions only ever operate on slots that `clevis luks list` reports,
+and a bare LUKS passphrase or keyfile slot has no Clevis token, so it
+never appears in that list in the first place. On top of that, Warden
+independently re-checks the target slot against `cryptsetup
+luksDump`'s own token metadata — a second, separate source — before
+ever running `clevis luks unbind`, and refuses outright if that slot
+isn't Clevis-managed. Both checks would have to fail at once for a
+non-Clevis slot to be touched.
+
 ## Menu 8's "rotate" option didn't remove the old binding
 
 That's by design if the new binding's test-unlock failed. Rotation
