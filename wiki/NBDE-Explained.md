@@ -54,6 +54,16 @@ either pin alone can recover the key; "both required" (`t=2`) means
 both must succeed. See [[Lessons Learned]] for the multi-pin timeout
 behaviour to expect when one of the pins is unreachable.
 
+Warden's binding wizard (menu 3) defaults the suggested threshold to
+1 ("any one pin"), on the basis that availability usually matters more
+than requiring every pin to succeed. The one case it calls out
+specifically: if one of the pins is this host's own local Tang server,
+a threshold of 1 means the device can *always* unlock using just that
+local pin, regardless of whether any external/network pin is
+reachable — which can quietly defeat the point of also binding to a
+network server. Raising the threshold to 2 in that specific case
+actually requires the external pin to succeed.
+
 ## Tailscale ordering
 
 `network-online.target` only guarantees basic networking is up, not

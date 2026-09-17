@@ -43,16 +43,6 @@ extract_tang_urls() {
         | sort -u
 }
 
-# check_tang_reachability <url> — prints "reachable <ms>" or "unreachable".
-check_tang_reachability() {
-    local url="$1" result
-    result="$(curl -sf -m 3 -o /dev/null -w '%{time_total}' "${url%/}/adv" 2>/dev/null)" || {
-        echo "unreachable"
-        return
-    }
-    printf 'reachable %sms\n' "$(awk -v t="$result" 'BEGIN{printf "%.0f", t*1000}')"
-}
-
 # tailscale_ordering_dropins — paths of any systemd-cryptsetup@ drop-ins
 # that order against tailscale-online.target, one per line.
 tailscale_ordering_dropins() {

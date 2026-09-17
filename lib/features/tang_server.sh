@@ -17,6 +17,17 @@ _tangd_dropin_file() {
     printf '%s/override.conf' "$(_tangd_dropin_dir)"
 }
 
+# configured_tangd_port — the port this host's own tangd.socket is set
+# to via Warden's drop-in, or 80 (tangd's conventional default) if none.
+configured_tangd_port() {
+    local file port
+    file="$(_tangd_dropin_file)"
+    if [[ -f "$file" ]]; then
+        port="$(grep -oE '^ListenStream=[0-9]+$' "$file" | tail -n1 | cut -d= -f2)"
+    fi
+    echo "${port:-80}"
+}
+
 is_valid_port() {
     local port="$1"
     [[ "$port" =~ ^[0-9]+$ ]] && (( port >= 1 && port <= 65535 ))

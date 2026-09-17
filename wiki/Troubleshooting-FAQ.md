@@ -2,7 +2,8 @@
 
 This page grows alongside the feature set — each phase adds the
 failure modes relevant to what it ships. Currently covers Phase 0
-(scaffolding) and Phase 1 (install, status dashboard).
+(scaffolding) and Phase 2 (install, Tang server config, Tang
+bindings/SSS/Tailscale, status dashboard).
 
 ## "warden: must be run as root"
 
@@ -36,6 +37,28 @@ tailnet, that's the expected result, not a bug.
 That's the literal state — no packages are auto-inferred as installed.
 This exact class of "assumed it was there" gap is why `clevis-systemd`
 being missed was a real incident; see [[Lessons Learned]].
+
+## The binding wizard says an address "might be Tailscale" and asks me to confirm
+
+That happens when the `tailscale` CLI isn't available on this host to
+check automatically, and the address you entered falls in
+`100.64.0.0/10` — the CGNAT range Tailscale uses. It's flagged as a
+guess deliberately: that range isn't exclusively Tailscale's, so
+Warden asks rather than assuming.
+
+## Why does menu 3 default the SSS threshold to "any 1 pin" instead of "all required"?
+
+Availability usually matters more than strictness for boot-time
+unlock — you generally want the drive to unlock if *any* trusted path
+works, not to fail because one of several redundant paths is down. The
+one exception the wizard calls out explicitly is when one of the pins
+is this host's own local Tang server: see [[NBDE Explained]] for why
+that specific combination is worth reconsidering.
+
+## Where does menu 3 save its trust configuration?
+
+`/etc/warden/tang-bindings.json`, with the previous version backed up
+before each overwrite, same as every other file Warden edits.
 
 ## More FAQ entries land as each feature phase ships.
 

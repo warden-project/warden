@@ -9,6 +9,16 @@ setup() {
 }
 teardown() { warden_test_teardown; }
 
+@test "configured_tangd_port defaults to 80 when no drop-in exists" {
+    [ "$(configured_tangd_port)" = "80" ]
+}
+
+@test "configured_tangd_port reads back a previously written port" {
+    mkdir -p "$(_tangd_dropin_dir)"
+    printf '[Socket]\nListenStream=\nListenStream=7500\n' > "$(_tangd_dropin_file)"
+    [ "$(configured_tangd_port)" = "7500" ]
+}
+
 @test "is_valid_port accepts valid ports" {
     is_valid_port 80
     is_valid_port 1

@@ -12,14 +12,13 @@ Tang and Clevis — on Ubuntu Server hosts.
 
 ## Status
 
-Phase 1 is complete and Phase 2 is under way: install (menu 1), Tang
-server config (menu 2), and the status dashboard (menu 7) are
-implemented, on top of the Phase 0 safety primitives (logging,
-dry-run execution, the root/boot/EFI guard, typed confirmation,
-backup-before-edit). Tang bindings/SSS/Tailscale (menu 3) and
-everything from menu 4 onward (the LUKS wizards, maintenance, and the
-Danger Zone) is not yet built. See the repository README for the phase
-roadmap.
+Phase 2 is complete: install (menu 1), Tang server config (menu 2),
+Tang bindings/SSS/Tailscale (menu 3), and the status dashboard
+(menu 7) are all implemented, on top of the Phase 0 safety primitives
+(logging, dry-run execution, the root/boot/EFI guard, typed
+confirmation, backup-before-edit). Everything from menu 4 onward (the
+LUKS wizards, maintenance, and the Danger Zone) is not yet built. See
+the repository README for the phase roadmap.
 
 ## Scope
 
