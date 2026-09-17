@@ -53,3 +53,11 @@ teardown() { warden_test_teardown; }
     WARDEN_DRY_RUN=1 ensure_systemd_unit_disabled ssh.service
     grep -q "disable ssh.service" "$WARDEN_LOG_FILE"
 }
+
+@test "restart_systemd_unit is unconditional -- runs even for a nonexistent unit (in dry-run)" {
+    # Unlike the ensure_* helpers, this never skips based on current
+    # state -- it exists specifically for "already active" being the
+    # broken state (see the comment on it in lib/core/pkg.sh).
+    WARDEN_DRY_RUN=1 restart_systemd_unit "definitely-not-a-real-unit.service"
+    grep -q "restart definitely-not-a-real-unit.service to apply changed config" "$WARDEN_LOG_FILE"
+}

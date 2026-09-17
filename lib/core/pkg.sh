@@ -62,6 +62,21 @@ ensure_systemd_unit_active() {
     run_cmd "start ${unit}" -- systemctl start "$unit"
 }
 
+# restart_systemd_unit <unit> — unconditional, not idempotency-checked
+# like the others: for a unit whose on-disk config just changed while
+# it was already running. Confirmed on real hardware that this matters
+# for socket units specifically -- systemd logs "Socket unit
+# configuration has changed while unit has been running, no open
+# socket file descriptor left" after a drop-in change + daemon-reload
+# alone, and the unit stays bound to its old config (e.g. the old
+# port) until explicitly restarted. "Already active" is exactly the
+# broken state here, so the normal ensure_*_active idempotency check
+# (skip if already active) is the wrong tool for this case.
+restart_systemd_unit() {
+    local unit="$1"
+    run_cmd "restart ${unit} to apply changed config" -- systemctl restart "$unit"
+}
+
 ensure_systemd_unit_disabled() {
     local unit="$1"
     if ! is_systemd_unit_enabled "$unit"; then

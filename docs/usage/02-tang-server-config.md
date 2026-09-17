@@ -17,8 +17,13 @@ Only available once Tang is installed (menu 1). Configures the local
   socket drop-ins.
 - Idempotent: re-running with the same port is a no-op; changing the
   port backs up the existing drop-in first.
-- Enables and starts `tangd.socket` (both idempotent — skipped if
-  already enabled/active).
+- Enables `tangd.socket` (idempotent — skipped if already enabled).
+  If it was already active (e.g. it's enabled by default on install),
+  it's explicitly **restarted** rather than left alone — confirmed on
+  real hardware that a running socket unit does not pick up a changed
+  port from a drop-in + `daemon-reload` alone; systemd itself flags it
+  non-functional until restarted. If it wasn't running yet, it's
+  simply started.
 - If `ufw` is active, offers to allow the chosen port through it.
 - Verifies with a local `curl http://localhost:<port>/adv` and reports
   success or failure clearly — it does not just assume the config

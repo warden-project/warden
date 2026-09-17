@@ -152,9 +152,21 @@ feature_tang_server_config() {
         fi
     fi
 
+    local was_active=0
+    is_systemd_unit_active "$WARDEN_TANGD_SOCKET_UNIT" && was_active=1
+
     ensure_tangd_port "$port"
     ensure_systemd_unit_enabled "$WARDEN_TANGD_SOCKET_UNIT"
-    ensure_systemd_unit_active "$WARDEN_TANGD_SOCKET_UNIT"
+
+    if [[ "$was_active" == "1" ]]; then
+        # Already running (e.g. tangd.socket is enabled by default on
+        # install): a plain "ensure active" is a no-op here, but the
+        # unit needs an explicit restart to actually bind the new port
+        # -- see restart_systemd_unit's comment for why.
+        restart_systemd_unit "$WARDEN_TANGD_SOCKET_UNIT"
+    else
+        ensure_systemd_unit_active "$WARDEN_TANGD_SOCKET_UNIT"
+    fi
 
     if is_ufw_active; then
         if warden_yesno "ufw is active" "ufw is active on this host. Allow port ${port}/tcp through it?"; then
