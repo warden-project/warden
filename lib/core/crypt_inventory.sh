@@ -10,8 +10,22 @@
 
 # luks_devices — one "<devpath> <uuid>" pair per line for every
 # crypto_LUKS device currently visible to the kernel.
+#
+# Uses `lsblk --json` rather than raw/awk column parsing -- see
+# candidate_format_devices in lib/features/luks_setup.sh for the exact
+# empty-column parsing bug this avoids. Not reproducible here today
+# (a real crypto_LUKS device's UUID is never actually empty, so the
+# awk column-shift this pattern is prone to never triggered by
+# accident), but fixed anyway rather than leaving the same fragile
+# assumption in a second place.
 luks_devices() {
-    lsblk -no PATH,UUID,FSTYPE -rp 2>/dev/null | awk '$3=="crypto_LUKS"{print $1, $2}'
+    lsblk --json -o PATH,UUID,FSTYPE 2>/dev/null | python3 -c '
+import json, sys
+data = json.load(sys.stdin)
+for dev in data.get("blockdevices", []):
+    if dev.get("fstype") == "crypto_LUKS":
+        print(dev["path"], dev.get("uuid") or "")
+'
 }
 
 # crypttab_mapper_for_uuid <uuid> — echoes the mapper name if <uuid> has

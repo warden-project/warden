@@ -7,11 +7,24 @@
 
 # candidate_format_devices — "<devpath> <fstype-or-none>" for every
 # disk/partition that is not already crypto_LUKS.
+#
+# Uses `lsblk --json` rather than raw/awk column parsing: confirmed on
+# real hardware that lsblk's raw mode represents an empty column as
+# two adjacent spaces, which awk's default whitespace-run field
+# splitting collapses -- silently shifting every later column left and
+# excluding blank disks (the primary case this function exists for)
+# from the result entirely. JSON has no such ambiguity.
 candidate_format_devices() {
-    lsblk -no PATH,FSTYPE,TYPE -rp 2>/dev/null | awk '
-        ($3=="disk" || $3=="part") && $2!="crypto_LUKS" {
-            print $1, ($2==""?"none":$2)
-        }'
+    lsblk --json -o PATH,FSTYPE,TYPE 2>/dev/null | python3 -c '
+import json, sys
+data = json.load(sys.stdin)
+for dev in data.get("blockdevices", []):
+    if dev.get("type") not in ("disk", "part"):
+        continue
+    if dev.get("fstype") == "crypto_LUKS":
+        continue
+    print(dev["path"], dev.get("fstype") or "none")
+'
 }
 
 generate_passphrase() {
@@ -24,6 +37,15 @@ generate_passphrase() {
 # the passphrase piped on stdin, which run_cmd's argv-array form
 # doesn't support. Mirrors run_cmd's own dry-run/logging behaviour by
 # hand, but the log line never includes the passphrase value itself.
+#
+# Confirmed on real hardware (not reproducible against the loop-device
+# test harness used in earlier dev-sandbox testing): lsblk/blkid's
+# cached view of a device can briefly lag behind cryptsetup actually
+# succeeding -- `uuid_for_device` immediately after a bare luksFormat
+# reliably returned empty in 5/5 trials, only fixed by waiting for
+# udev to catch up. Since this function's only caller (menu 4) queries
+# the new UUID right after formatting to hand off into enrolment, an
+# empty UUID here would have written a broken `UUID=` crypttab line.
 format_luks_device() {
     local dev="$1" passphrase="$2"
     if [[ "${WARDEN_DRY_RUN}" == "1" ]]; then
@@ -35,6 +57,9 @@ format_luks_device() {
     printf '%s' "$passphrase" | cryptsetup luksFormat --batch-mode "$dev" - >>"$WARDEN_LOG_FILE" 2>&1
     local status=$?
     log_line "  -> exit ${status}"
+    if [[ "$status" -eq 0 ]]; then
+        udevadm settle
+    fi
     return "$status"
 }
 
