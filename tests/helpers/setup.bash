@@ -27,6 +27,9 @@ warden_test_setup() {
     source "${WARDEN_ROOT}/lib/features/luks_enroll.sh"
     source "${WARDEN_ROOT}/lib/features/luks_setup.sh"
     source "${WARDEN_ROOT}/lib/features/lateboot.sh"
+    source "${WARDEN_ROOT}/lib/features/binding_rotate.sh"
+    source "${WARDEN_ROOT}/lib/features/header_backup.sh"
+    source "${WARDEN_ROOT}/lib/features/tang_rotate.sh"
 
     log_init
 }

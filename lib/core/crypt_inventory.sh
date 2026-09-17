@@ -38,3 +38,18 @@ crypttab_mapper_names() {
     [[ -f "$crypttab" ]] || return 0
     awk '$0 !~ /^#/ && NF {print $1}' "$crypttab"
 }
+
+# managed_luks_devices — "<devpath> <uuid> <mapper>" for crypto_LUKS
+# devices that already have a crypttab entry. Excludes anything that is
+# or backs root/boot/efi, same as the enrolment wizard's exclusion:
+# Warden never touches root-drive bindings via a general-purpose menu.
+managed_luks_devices() {
+    local dev uuid mapper
+    while read -r dev uuid; do
+        [[ -n "$dev" ]] || continue
+        mapper="$(crypttab_mapper_for_uuid "$uuid")"
+        [[ -n "$mapper" ]] || continue
+        guard_not_system_critical "$dev" || continue
+        printf '%s %s %s\n' "$dev" "$uuid" "$mapper"
+    done < <(luks_devices)
+}

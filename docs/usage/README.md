@@ -10,3 +10,6 @@ top-level README for the current phase status.
 - [05-luks-enrolment.md](05-luks-enrolment.md) — menu 5
 - [06-late-boot-unlocker.md](06-late-boot-unlocker.md) — menu 6
 - [07-status-dashboard.md](07-status-dashboard.md) — menu 7
+- [08-binding-rotate.md](08-binding-rotate.md) — menu 8
+- [09-header-backup.md](09-header-backup.md) — menu 9
+- [10-tang-key-rotation.md](10-tang-key-rotation.md) — menu 10

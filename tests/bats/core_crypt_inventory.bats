@@ -64,3 +64,49 @@ teardown() { warden_test_teardown; }
     [[ "$output" == *"$loopdev"* ]]
     losetup -d "$loopdev"
 }
+
+@test "managed_luks_devices excludes an unmanaged loop-backed LUKS device" {
+    if [ "$(id -u)" -ne 0 ]; then
+        skip "requires root for losetup/cryptsetup"
+    fi
+    local img loopdev
+    img="${TEST_TMPDIR}/disk.img"
+    truncate -s 64M "$img"
+    loopdev="$(losetup -f --show "$img")"
+    echo -n "testpassphrase" | cryptsetup luksFormat --batch-mode "$loopdev" -
+    WARDEN_CRYPTTAB="${TEST_TMPDIR}/crypttab"
+    : > "$WARDEN_CRYPTTAB"
+    run managed_luks_devices
+    [[ "$output" != *"$loopdev"* ]]
+    losetup -d "$loopdev"
+}
+
+@test "managed_luks_devices includes a device once it has a crypttab entry" {
+    if [ "$(id -u)" -ne 0 ]; then
+        skip "requires root for losetup/cryptsetup"
+    fi
+    local img loopdev uuid
+    img="${TEST_TMPDIR}/disk.img"
+    truncate -s 64M "$img"
+    loopdev="$(losetup -f --show "$img")"
+    echo -n "testpassphrase" | cryptsetup luksFormat --batch-mode "$loopdev" -
+    uuid="$(uuid_for_device "$loopdev")"
+    WARDEN_CRYPTTAB="${TEST_TMPDIR}/crypttab"
+    printf 'data-disk UUID=%s none luks,_netdev\n' "$uuid" > "$WARDEN_CRYPTTAB"
+    run managed_luks_devices
+    [[ "$output" == *"$loopdev"*"data-disk"* ]]
+    losetup -d "$loopdev"
+}
+
+@test "managed_luks_devices excludes the current root device even with a matching crypttab entry" {
+    WARDEN_CRYPTTAB="${TEST_TMPDIR}/crypttab"
+    local root_src
+    root_src="$(findmnt -no SOURCE /)"
+    printf 'fake-root UUID=test-fake-uuid none luks,_netdev\n' > "$WARDEN_CRYPTTAB"
+    # Override luks_devices for this test only, to exercise the guard
+    # against the real root device without needing root to actually
+    # LUKS-format anything.
+    luks_devices() { printf '%s %s\n' "$root_src" "test-fake-uuid"; }
+    run managed_luks_devices
+    [[ "$output" != *"$root_src"* ]]
+}

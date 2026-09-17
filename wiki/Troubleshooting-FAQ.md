@@ -2,9 +2,10 @@
 
 This page grows alongside the feature set — each phase adds the
 failure modes relevant to what it ships. Currently covers Phase 0
-(scaffolding) and Phase 3 (install, Tang server config, Tang
+(scaffolding) and Phase 4 (install, Tang server config, Tang
 bindings/SSS/Tailscale, the LUKS wizards, the late-boot unlocker,
-status dashboard).
+status dashboard, and Maintenance: binding rotation, header backup,
+Tang key rotation).
 
 ## "warden: must be run as root"
 
@@ -98,6 +99,25 @@ profile than the disposable-sandbox testing this project is built
 around. CI is scoped to `shellcheck` only for that reason; run
 `bats tests/bats/` as root locally, or on a dedicated disposable test
 VM, to exercise the root-gated tests for real.
+
+## Menu 8's "rotate" option didn't remove the old binding
+
+That's by design if the new binding's test-unlock failed. Rotation
+only offers to remove the old slot(s) once the new one has proven it
+actually works — if verification fails, the old binding is left
+completely alone so the device isn't left worse off than before you
+started. Check Tang reachability and the session log, fix the
+underlying issue, and try again.
+
+## Menu 10 says it can't find the Tang key rotation helper
+
+Warden looks for upstream Tang's bundled `tangd-rotate-keys` script at
+a couple of conventional paths (`/usr/libexec/`, `/usr/lib/tangd/`)
+and falls back to a `PATH` lookup — this hasn't been verified against
+a real Ubuntu `tang` package install yet. If your install has it
+somewhere else, set `WARDEN_TANGD_ROTATE_KEYS_CANDIDATES` (space
+separated paths) rather than Warden guessing at reimplementing key
+rotation by hand.
 
 ## More FAQ entries land as each feature phase ships.
 
