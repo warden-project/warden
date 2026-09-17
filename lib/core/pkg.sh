@@ -61,3 +61,31 @@ ensure_systemd_unit_active() {
     fi
     run_cmd "start ${unit}" -- systemctl start "$unit"
 }
+
+ensure_systemd_unit_disabled() {
+    local unit="$1"
+    if ! is_systemd_unit_enabled "$unit"; then
+        log_line "UNIT: ${unit} already disabled, skipping"
+        return 0
+    fi
+    run_cmd "disable ${unit}" -- systemctl disable "$unit"
+}
+
+ensure_systemd_unit_inactive() {
+    local unit="$1"
+    if ! is_systemd_unit_active "$unit"; then
+        log_line "UNIT: ${unit} already inactive, skipping"
+        return 0
+    fi
+    run_cmd "stop ${unit}" -- systemctl stop "$unit"
+}
+
+# ensure_pkg_removed <pkg> — idempotent: no-op if already absent.
+ensure_pkg_removed() {
+    local pkg="$1"
+    if ! is_pkg_installed "$pkg"; then
+        log_line "PKG: ${pkg} already not installed, skipping"
+        return 0
+    fi
+    run_cmd "remove package ${pkg}" -- apt-get remove -y "$pkg"
+}

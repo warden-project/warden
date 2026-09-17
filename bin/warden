@@ -50,6 +50,8 @@ source "${WARDEN_ROOT}/lib/features/header_backup.sh"
 source "${WARDEN_ROOT}/lib/features/tang_rotate.sh"
 # shellcheck source=lib/features/danger_erase.sh
 source "${WARDEN_ROOT}/lib/features/danger_erase.sh"
+# shellcheck source=lib/features/uninstall.sh
+source "${WARDEN_ROOT}/lib/features/uninstall.sh"
 
 if [[ "${EUID}" -ne 0 ]]; then
     echo "warden: must be run as root (e.g. sudo warden). Refusing to elevate per-command." >&2
@@ -90,6 +92,7 @@ main_menu_loop() {
             9) feature_header_backup_menu ;;
             10) feature_tang_key_rotate_menu ;;
             11) feature_danger_erase_menu ;;
+            12) feature_uninstall_menu ;;
             7) feature_status_dashboard ;;
             13) exit 0 ;;
             *) warden_msg "Not yet implemented" "Menu item ${choice} is not yet implemented yet." ;;

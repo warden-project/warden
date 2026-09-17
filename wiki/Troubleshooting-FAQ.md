@@ -1,10 +1,8 @@
 # Troubleshooting / FAQ
 
-This page grows alongside the feature set — each phase adds the
-failure modes relevant to what it ships. Currently covers Phase 0
-(scaffolding) through Phase 5's Danger Zone (install, Tang server
-config, Tang bindings/SSS/Tailscale, the LUKS wizards, the late-boot
-unlocker, status dashboard, Maintenance, and the cryptographic erase).
+This page grows alongside the feature set. Covers every menu item —
+install through Danger Zone and uninstall/revert — plus Phase 0's
+scaffolding.
 
 ## "warden: must be run as root"
 
@@ -141,6 +139,26 @@ device) without being onerous enough to invite blind copy-paste. The
 root/boot/efi override step — a distinct, rarer situation — still uses
 the full identifier, since overriding a safety refusal is meant to be
 a deliberately harder bar than a normal destructive confirmation.
+
+## Is there any way to accidentally reach the Danger Zone from Uninstall, or vice versa?
+
+No. This was checked directly rather than left to convention: `grep`
+confirms `lib/features/uninstall.sh` contains zero references to
+anything in `lib/features/danger_erase.sh` (no shared functions, no
+sourcing), and both menus are reachable only from `bin/warden`'s flat,
+independent dispatch on the menu number you pick. There is no code
+path from one into the other.
+
+## Uninstall's "unbind Clevis from a device" removed nothing — is that a bug?
+
+Check the session log. If every slot on that device turned out to have
+no Clevis token attached, the same hard gate menu 8 uses (cross-checked
+against `cryptsetup luksDump`, independent of `clevis luks list`)
+would have refused each one rather than silently succeeding — this
+should be unreachable in practice, since the device only appeared in
+the picker because it had at least one Clevis binding, but if you're
+seeing it, treat it as worth investigating rather than assuming it's
+fine.
 
 ## More FAQ entries land as each feature phase ships.
 

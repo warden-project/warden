@@ -15,25 +15,30 @@ native systemd service, that is in scope.
 
 ## Status
 
-**Phase 5 in progress.** Core safety primitives (logging, dry-run-aware
-command execution, device/UUID resolution, the root/boot/EFI guard,
-typed confirmation, backup-before-edit) are in place and tested. Every
-menu except Uninstall/revert is now implemented: install (1), Tang
-server config (2), Tang bindings/SSS/Tailscale (3), the LUKS setup
-wizard (4), the LUKS enrolment wizard (5), the late-boot unlocker (6),
-the status dashboard (7), add/remove/rotate a binding (8), LUKS header
-backup (9), Tang server key rotation (10), and the Danger Zone's
-cryptographic erase (11). Menus 4, 5, and 11 route through the same
+**All twelve menu items are implemented.** Core safety primitives
+(logging, dry-run-aware command execution, device/UUID resolution, the
+root/boot/EFI guard, typed confirmation, backup-before-edit) are in
+place and tested throughout: install (1), Tang server config (2), Tang
+bindings/SSS/Tailscale (3), the LUKS setup wizard (4), the LUKS
+enrolment wizard (5), the late-boot unlocker (6), the status dashboard
+(7), add/remove/rotate a binding (8), LUKS header backup (9), Tang
+server key rotation (10), the Danger Zone's cryptographic erase (11),
+and uninstall/revert (12).
+
+Menus 4, 5, and 11 route through the same
 `confirm_destructive_device_action` guard (lsblk display, root/boot/efi
 refusal with override, typed confirmation) built in Phase 0 — 11 wraps
 it in the Danger Zone's distinct visual banner and is the single most
-irreversible action in the tool; menu 8's rotate action follows the
-same bind-verify-then-unbind sequencing.
+irreversible action in the tool. Menu 8's rotate action follows the
+same bind-verify-then-unbind sequencing; menu 12's device-unbind action
+shares the same hard non-Clevis-slot gate as menu 8, so neither can
+touch a bare passphrase or keyfile slot. Menu 12 shares zero code path
+with menu 11 — verified by grep, not just convention — so uninstalling
+can never reach the erase flow.
 
-Uninstall/revert (menu 12) is the one remaining piece, and must be
-structurally unreachable from the Danger Zone's erase flow, not just
-conventionally separate. Root-drive unlock (`clevis-initramfs`) remains
-deliberately deferred. See the wiki for the full roadmap.
+Root-drive unlock (`clevis-initramfs`) remains deliberately deferred,
+to be revisited separately. See the wiki for lessons learned and
+design rationale.
 
 ## Prerequisites
 
