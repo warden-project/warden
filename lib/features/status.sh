@@ -9,10 +9,16 @@
 
 # clevis_pins_for_device <devpath> — raw `clevis luks list` output, or
 # empty if clevis isn't installed or the device has no bindings.
+# Always returns 0 (see load_bindings_config's comment for why this
+# matters): `clevis luks list` exits non-zero for the very common,
+# entirely normal case of a device with no bindings yet, and this is
+# called via bare assignment from several places under bin/warden's
+# `set -e`.
 clevis_pins_for_device() {
     local dev="$1"
     command -v clevis >/dev/null 2>&1 || return 0
     clevis luks list -d "$dev" 2>/dev/null
+    return 0
 }
 
 # extract_tang_urls <clevis_luks_list_output> — unique tang server URLs

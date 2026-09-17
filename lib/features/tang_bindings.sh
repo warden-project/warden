@@ -46,9 +46,15 @@ tailscale_cli_present() {
 }
 
 # tailscale_status_json — wrapped so tests can stub it independently of
-# the tailscale_cli_present check.
+# the tailscale_cli_present check. Always returns 0 (see
+# load_bindings_config's comment for why): `tailscale status` exits
+# non-zero when tailscaled isn't running/logged in, which is a normal
+# "can't confirm, fall back to the heuristic" outcome here, not a
+# script-ending error, and this is called via bare assignment inside
+# classify_tailscale.
 tailscale_status_json() {
     tailscale status --json 2>/dev/null
+    return 0
 }
 
 # tailscale_peer_match <host> <status_json> — true if host matches a
@@ -170,8 +176,20 @@ save_bindings_config() {
     rm -f "$before" "$after"
 }
 
+# load_bindings_config — echoes the saved config, or nothing if none
+# exists yet. Always returns 0: this is a getter, not a predicate, and
+# every caller is a bare `x="$(load_bindings_config)"` assignment --
+# under bin/warden's `set -e`, returning non-zero here (e.g. from a
+# naive `[[ -f ... ]] && cat ...`, which is false/1 when the file
+# doesn't exist) kills the entire program the first time this runs
+# before any config has been saved. Confirmed on real hardware: menu 3
+# crashed the whole TUI outright on a fresh install for exactly this
+# reason.
 load_bindings_config() {
-    [[ -f "$WARDEN_BINDINGS_FILE" ]] && cat "$WARDEN_BINDINGS_FILE"
+    if [[ -f "$WARDEN_BINDINGS_FILE" ]]; then
+        cat "$WARDEN_BINDINGS_FILE"
+    fi
+    return 0
 }
 
 # describe_saved_bindings <json> — a human-readable summary of a saved

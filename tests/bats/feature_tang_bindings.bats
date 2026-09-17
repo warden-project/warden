@@ -159,3 +159,61 @@ EOF
     save_bindings_config '{"pin_type":"tang"}'
     [[ "$(load_bindings_config)" == *'"pin_type":"tang"'* ]]
 }
+
+@test "load_bindings_config survives a bare assignment under set -e when nothing is saved" {
+    # Regression test for a real crash found on real hardware: bats
+    # itself never runs test bodies under `set -e`, so this exact bug
+    # (load_bindings_config returning non-zero via a `[[ -f ]] && cat`
+    # short-circuit, silently killing the whole bin/warden process on
+    # `existing="$(load_bindings_config)"`) was invisible to every
+    # other test in this file. This reproduces the actual failure mode.
+    run bash -c "
+        set -euo pipefail
+        source '${WARDEN_ROOT}/lib/core/log.sh'
+        source '${WARDEN_ROOT}/lib/core/exec.sh'
+        source '${WARDEN_ROOT}/lib/core/backup.sh'
+        WARDEN_LOG_DIR='${WARDEN_LOG_DIR}'
+        WARDEN_BINDINGS_FILE='${WARDEN_BINDINGS_FILE}'
+        log_init
+        source '${WARDEN_ROOT}/lib/features/tang_bindings.sh'
+        existing=\"\$(load_bindings_config)\"
+        echo 'SURVIVED'
+    "
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"SURVIVED"* ]]
+}
+
+@test "tailscale_status_json survives a bare assignment under set -e when tailscale fails" {
+    mkdir -p "${TEST_TMPDIR}/bin"
+    cat > "${TEST_TMPDIR}/bin/tailscale" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+    chmod +x "${TEST_TMPDIR}/bin/tailscale"
+    run env PATH="${TEST_TMPDIR}/bin:${PATH}" bash -c "
+        set -euo pipefail
+        source '${WARDEN_ROOT}/lib/core/log.sh'
+        source '${WARDEN_ROOT}/lib/core/exec.sh'
+        WARDEN_LOG_DIR='${WARDEN_LOG_DIR}'
+        log_init
+        source '${WARDEN_ROOT}/lib/features/tang_bindings.sh'
+        json=\"\$(tailscale_status_json)\"
+        echo 'SURVIVED'
+    "
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"SURVIVED"* ]]
+}
+
+@test "fetch_tang_adv survives a bare assignment under set -e for an unreachable url" {
+    run bash -c "
+        set -euo pipefail
+        source '${WARDEN_ROOT}/lib/core/log.sh'
+        WARDEN_LOG_DIR='${WARDEN_LOG_DIR}'
+        log_init
+        source '${WARDEN_ROOT}/lib/core/net.sh'
+        body=\"\$(fetch_tang_adv 'http://127.0.0.1:1')\"
+        echo 'SURVIVED'
+    "
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"SURVIVED"* ]]
+}

@@ -11,8 +11,13 @@ check_tang_reachability() {
     printf 'reachable %sms\n' "$(awk -v t="$result" 'BEGIN{printf "%.0f", t*1000}')"
 }
 
-# fetch_tang_adv <url> — prints the raw /adv response body, empty on failure.
+# fetch_tang_adv <url> — prints the raw /adv response body, empty on
+# failure. Always returns 0 (see load_bindings_config in
+# tang_bindings.sh for why): an unreachable URL is an expected, normal
+# outcome here, not a script-ending error, and this is called via bare
+# assignment.
 fetch_tang_adv() {
     local url="$1"
     curl -sf -m 3 "${url%/}/adv" 2>/dev/null
+    return 0
 }

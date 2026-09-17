@@ -74,3 +74,31 @@ EOF
     [ "$(unit_state cron.service)" = "active" ]
 }
 
+@test "clevis_pins_for_device survives a bare assignment under set -e for a device with no bindings" {
+    # Regression test for a real crash class found on real hardware:
+    # `clevis luks list` exits non-zero for the very common "no
+    # bindings yet" case, and this is called via bare assignment from
+    # render_status_report and binding_rotate.sh -- under
+    # bin/warden's `set -e`, that silently kills the whole program.
+    # bats itself never runs under set -e, so no other test here would
+    # have caught this.
+    mkdir -p "${TEST_TMPDIR}/bin"
+    cat > "${TEST_TMPDIR}/bin/clevis" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+    chmod +x "${TEST_TMPDIR}/bin/clevis"
+    run env PATH="${TEST_TMPDIR}/bin:${PATH}" bash -c "
+        set -euo pipefail
+        source '${WARDEN_ROOT}/lib/core/log.sh'
+        source '${WARDEN_ROOT}/lib/core/exec.sh'
+        WARDEN_LOG_DIR='${WARDEN_LOG_DIR}'
+        log_init
+        source '${WARDEN_ROOT}/lib/features/status.sh'
+        pins=\"\$(clevis_pins_for_device /dev/fake)\"
+        echo 'SURVIVED'
+    "
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"SURVIVED"* ]]
+}
+
