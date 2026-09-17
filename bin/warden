@@ -24,6 +24,8 @@ source "${WARDEN_ROOT}/lib/core/backup.sh"
 source "${WARDEN_ROOT}/lib/core/pkg.sh"
 # shellcheck source=lib/core/net.sh
 source "${WARDEN_ROOT}/lib/core/net.sh"
+# shellcheck source=lib/core/crypt_inventory.sh
+source "${WARDEN_ROOT}/lib/core/crypt_inventory.sh"
 # shellcheck source=lib/tui/menu.sh
 source "${WARDEN_ROOT}/lib/tui/menu.sh"
 # shellcheck source=lib/features/install.sh

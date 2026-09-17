@@ -19,6 +19,7 @@ warden_test_setup() {
     source "${WARDEN_ROOT}/lib/core/backup.sh"
     source "${WARDEN_ROOT}/lib/core/pkg.sh"
     source "${WARDEN_ROOT}/lib/core/net.sh"
+    source "${WARDEN_ROOT}/lib/core/crypt_inventory.sh"
     source "${WARDEN_ROOT}/lib/features/install.sh"
     source "${WARDEN_ROOT}/lib/features/status.sh"
     source "${WARDEN_ROOT}/lib/features/tang_server.sh"
