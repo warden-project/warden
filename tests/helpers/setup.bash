@@ -24,6 +24,9 @@ warden_test_setup() {
     source "${WARDEN_ROOT}/lib/features/status.sh"
     source "${WARDEN_ROOT}/lib/features/tang_server.sh"
     source "${WARDEN_ROOT}/lib/features/tang_bindings.sh"
+    source "${WARDEN_ROOT}/lib/features/luks_enroll.sh"
+    source "${WARDEN_ROOT}/lib/features/luks_setup.sh"
+    source "${WARDEN_ROOT}/lib/features/lateboot.sh"
 
     log_init
 }

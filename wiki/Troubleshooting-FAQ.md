@@ -2,8 +2,9 @@
 
 This page grows alongside the feature set — each phase adds the
 failure modes relevant to what it ships. Currently covers Phase 0
-(scaffolding) and Phase 2 (install, Tang server config, Tang
-bindings/SSS/Tailscale, status dashboard).
+(scaffolding) and Phase 3 (install, Tang server config, Tang
+bindings/SSS/Tailscale, the LUKS wizards, the late-boot unlocker,
+status dashboard).
 
 ## "warden: must be run as root"
 
@@ -59,6 +60,31 @@ that specific combination is worth reconsidering.
 
 `/etc/warden/tang-bindings.json`, with the previous version backed up
 before each overwrite, same as every other file Warden edits.
+
+## Why do I have to type "FORMAT `<8 characters>`" instead of just confirming yes/no?
+
+The 8 characters are read directly off the device identifier shown on
+screen at that exact moment (a UUID fragment, or the device path for a
+brand-new blank device). A fixed word or a y/n answer can be given from
+habit without re-checking the target; this can only be typed correctly
+by actually reading what's currently on screen. See [[Lessons
+Learned]] for the near-miss this specifically guards against.
+
+## My device didn't show up in the LUKS enrolment wizard's list
+
+Two possible reasons: it's already in `/etc/crypttab` (check the status
+dashboard, menu 7), or it's been excluded because it is or backs this
+system's root filesystem, `/boot`, or `/boot/efi`. The second case is
+deliberate — root-drive unlock is a separate, not-yet-built feature by
+design, not an oversight.
+
+## The bind succeeded but the test-unlock failed — is the device broken?
+
+No. The Clevis binding was added to the LUKS header, but the wizard's
+own test-unlock (into a throwaway mapper name, cleaned up immediately)
+didn't succeed — usually a Tang reachability problem, not device
+corruption. Check the Tang server status on the dashboard (menu 7) and
+the session log before rebooting anything relying on this binding.
 
 ## More FAQ entries land as each feature phase ships.
 

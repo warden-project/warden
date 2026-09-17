@@ -12,13 +12,19 @@ Tang and Clevis — on Ubuntu Server hosts.
 
 ## Status
 
-Phase 2 is complete: install (menu 1), Tang server config (menu 2),
-Tang bindings/SSS/Tailscale (menu 3), and the status dashboard
-(menu 7) are all implemented, on top of the Phase 0 safety primitives
-(logging, dry-run execution, the root/boot/EFI guard, typed
-confirmation, backup-before-edit). Everything from menu 4 onward (the
-LUKS wizards, maintenance, and the Danger Zone) is not yet built. See
-the repository README for the phase roadmap.
+Phase 3 is complete: every Day 0/Day 1 menu item is implemented --
+install (1), Tang server config (2), Tang bindings/SSS/Tailscale (3),
+LUKS setup (4), LUKS enrolment (5), the late-boot unlocker (6), and the
+status dashboard (7). Menus 4 and 5 are the first paths that actually
+touch disk encryption state, and both route through the same
+destructive-confirmation guard built in Phase 0 (lsblk display,
+root/boot/efi refusal with a typed override, then a typed
+`<ACTION> <fragment>` confirmation).
+
+Maintenance (menus 8-10), the Danger Zone (menu 11), and
+uninstall/revert (menu 12) are not yet built. Root-drive unlock
+(`clevis-initramfs`) remains deliberately deferred -- see
+[[Lessons Learned]]. See the repository README for the phase roadmap.
 
 ## Scope
 

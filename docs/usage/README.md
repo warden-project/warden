@@ -6,4 +6,7 @@ top-level README for the current phase status.
 - [01-install.md](01-install.md) — menu 1
 - [02-tang-server-config.md](02-tang-server-config.md) — menu 2
 - [03-tang-bindings.md](03-tang-bindings.md) — menu 3
+- [04-luks-setup.md](04-luks-setup.md) — menu 4
+- [05-luks-enrolment.md](05-luks-enrolment.md) — menu 5
+- [06-late-boot-unlocker.md](06-late-boot-unlocker.md) — menu 6
 - [07-status-dashboard.md](07-status-dashboard.md) — menu 7

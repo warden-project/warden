@@ -15,14 +15,21 @@ native systemd service, that is in scope.
 
 ## Status
 
-**Phase 2 complete.** Core safety primitives (logging, dry-run-aware
+**Phase 3 complete.** Core safety primitives (logging, dry-run-aware
 command execution, device/UUID resolution, the root/boot/EFI guard,
-typed confirmation, backup-before-edit) are in place and tested.
-Menu 1 (install), menu 2 (Tang server config), menu 3 (Tang
-bindings/SSS/Tailscale), and menu 7 (status dashboard) are implemented
-— all non-destructive. Everything from menu 4 onward (the LUKS
-wizards, maintenance, and the Danger Zone) is not yet built. See the
-wiki for the full roadmap.
+typed confirmation, backup-before-edit) are in place and tested. Every
+Day 0/Day 1 menu item is now implemented: install (1), Tang server
+config (2), Tang bindings/SSS/Tailscale (3), the LUKS setup wizard (4),
+the LUKS enrolment wizard (5), the late-boot unlocker (6), and the
+status dashboard (7). Menus 4 and 5 are the first destructive-capable
+paths in the tool — both route through the same
+`confirm_destructive_device_action` guard (lsblk display, root/boot/efi
+refusal with override, typed confirmation) built in Phase 0.
+
+Maintenance (menus 8-10), the Danger Zone (menu 11), and
+uninstall/revert (menu 12) are not yet built. Root-drive unlock
+(`clevis-initramfs`) remains deliberately deferred. See the wiki for
+the full roadmap.
 
 ## Prerequisites
 

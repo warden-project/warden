@@ -36,6 +36,12 @@ source "${WARDEN_ROOT}/lib/features/status.sh"
 source "${WARDEN_ROOT}/lib/features/tang_server.sh"
 # shellcheck source=lib/features/tang_bindings.sh
 source "${WARDEN_ROOT}/lib/features/tang_bindings.sh"
+# shellcheck source=lib/features/luks_enroll.sh
+source "${WARDEN_ROOT}/lib/features/luks_enroll.sh"
+# shellcheck source=lib/features/luks_setup.sh
+source "${WARDEN_ROOT}/lib/features/luks_setup.sh"
+# shellcheck source=lib/features/lateboot.sh
+source "${WARDEN_ROOT}/lib/features/lateboot.sh"
 
 if [[ "${EUID}" -ne 0 ]]; then
     echo "warden: must be run as root (e.g. sudo warden). Refusing to elevate per-command." >&2
@@ -68,6 +74,9 @@ main_menu_loop() {
             1) feature_install_menu ;;
             2) feature_tang_server_config ;;
             3) feature_tang_bindings_menu ;;
+            4) feature_luks_setup_menu ;;
+            5) feature_luks_enrol_menu ;;
+            6) feature_lateboot_menu ;;
             7) feature_status_dashboard ;;
             13) exit 0 ;;
             *) warden_msg "Not yet implemented" "Menu item ${choice} is not yet implemented yet." ;;
