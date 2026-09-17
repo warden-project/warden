@@ -170,9 +170,50 @@ load_bindings_config() {
     [[ -f "$WARDEN_BINDINGS_FILE" ]] && cat "$WARDEN_BINDINGS_FILE"
 }
 
+# describe_saved_bindings <json> — a human-readable summary of a saved
+# trust configuration, for showing before offering to replace it.
+describe_saved_bindings() {
+    local json="$1"
+    python3 -c '
+import json, sys
+data = json.loads(sys.argv[1])
+pin_type = data.get("pin_type", "?")
+pin_config = data.get("pin_config", {})
+addresses = data.get("addresses", [])
+
+if pin_type == "sss":
+    t = pin_config.get("t", "?")
+    n = sum(len(v) for v in pin_config.get("pins", {}).values())
+    print(f"Pin type: sss (threshold {t} of {n})")
+elif pin_type == "tpm2":
+    print("Pin type: tpm2 (this machine'"'"'s TPM chip only)")
+else:
+    print(f"Pin type: {pin_type}")
+
+if addresses:
+    print("Addresses:")
+    for a in addresses:
+        tag = ""
+        if a.get("is_tailscale"):
+            method = a.get("detection_method", "?")
+            tag = " (Tailscale, " + method + ")"
+        print("  - " + a["url"] + tag)
+' "$json"
+}
+
 readonly WARDEN_SSS_TIMEOUT_CAVEAT="One of these groups of addresses appears to be the same physical Tang server, reached over both a LAN path and a Tailscale path. This works, but if the Tailscale path is ever unreachable, Clevis does not fail over quickly -- the unreachable pin can take several minutes to time out before falling through to the one that works. This is documented upstream Clevis behaviour, not a Warden bug, but it's worth knowing about before you commit to this combination."
 
 feature_tang_bindings_menu() {
+    local existing
+    existing="$(load_bindings_config)"
+    if [[ -n "$existing" ]]; then
+        if ! warden_yesno "Existing trust configuration" "$(describe_saved_bindings "$existing")\n\nReplace this configuration?"; then
+            return 0
+        fi
+    else
+        warden_msg "No trust configuration yet" "No Tang trust configuration is currently saved for this host."
+    fi
+
     local -a addresses=()
     local -a is_ts=()
     local -a ts_method=()

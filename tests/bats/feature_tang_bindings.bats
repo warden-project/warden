@@ -120,6 +120,28 @@ EOF
     [[ "$out" != *"http://c"* ]]
 }
 
+@test "describe_saved_bindings summarises a plain single-tang config" {
+    local out
+    out="$(describe_saved_bindings '{"pin_type":"tang","pin_config":{"url":"http://a"},"addresses":[{"url":"http://a","is_tailscale":false,"detection_method":"no"}]}')"
+    [[ "$out" == *"Pin type: tang"* ]]
+    [[ "$out" == *"http://a"* ]]
+    [[ "$out" != *"Tailscale"* ]]
+}
+
+@test "describe_saved_bindings shows the sss threshold and flags tailscale addresses" {
+    local out
+    out="$(describe_saved_bindings '{"pin_type":"sss","pin_config":{"t":1,"pins":{"tang":[{"url":"http://a"},{"url":"http://b"}]}},"addresses":[{"url":"http://a","is_tailscale":false,"detection_method":"no"},{"url":"http://b","is_tailscale":true,"detection_method":"confirmed"}]}')"
+    [[ "$out" == *"threshold 1 of 2"* ]]
+    [[ "$out" == *"http://b (Tailscale, confirmed)"* ]]
+    [[ "$out" != *"http://a (Tailscale"* ]]
+}
+
+@test "describe_saved_bindings summarises a tpm2-only config" {
+    local out
+    out="$(describe_saved_bindings '{"pin_type":"tpm2","pin_config":{},"addresses":[]}')"
+    [[ "$out" == *"tpm2"* ]]
+}
+
 @test "save_bindings_config writes the file and backs up on a second save" {
     save_bindings_config '{"pin_type":"tang"}'
     [ -f "$WARDEN_BINDINGS_FILE" ]

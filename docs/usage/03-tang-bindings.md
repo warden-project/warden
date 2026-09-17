@@ -7,6 +7,11 @@ device.
 
 ## Flow
 
+0. Shows the currently saved trust configuration first, if one exists
+   (pin type, threshold, and every address with its Tailscale flag), and
+   asks whether to replace it before doing anything else. If nothing is
+   saved yet, says so plainly rather than launching straight into the
+   wizard with no indication of current state.
 1. If Tang is installed and running on this host, offers to include it
    (`127.0.0.1:<configured port>`) as a trusted server.
 2. Prompts for further `host:port` addresses, one at a time, until you
