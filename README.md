@@ -36,9 +36,18 @@ touch a bare passphrase or keyfile slot. Menu 12 shares zero code path
 with menu 11 — verified by grep, not just convention — so uninstalling
 can never reach the erase flow.
 
+All twelve menus have also been driven interactively end-to-end
+against real Ubuntu 24.04 hardware (real `tang`/`clevis`/`cryptsetup`/
+`systemd`, not just the bats suite's loop-device stand-ins) — that pass
+found and fixed several real bugs invisible in a rootless dev sandbox,
+including a root/boot/EFI guard gap that missed a whole-disk device
+and a Danger Zone erase leaving a boot-hang hazard behind. See the
+wiki's Lessons Learned page for the full list.
+
 Root-drive unlock (`clevis-initramfs`) remains deliberately deferred,
-to be revisited separately. See the wiki for lessons learned and
-design rationale.
+to be revisited separately, as is ZFS pool/dataset support (tracked in
+`docs/future-work.md`). See the wiki for lessons learned and design
+rationale.
 
 ## Prerequisites
 
