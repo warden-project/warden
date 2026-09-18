@@ -183,9 +183,14 @@ straightforward to add later, but hasn't been done).
 fstab check: if present, shows that unit's enabled/active state plus
 `describe_zfs_pool_status` (`zpool status`/`zfs list`, or "pool not
 currently imported" if it isn't right now) instead of an fstab line
-that would never apply to a ZFS-backed device anyway. Covered by bats
-tests with stubbed dependencies; not yet re-confirmed visually against
-the real dashboard on the test VM the way menu 1/4/11/12 were.
+that would never apply to a ZFS-backed device anyway.
+
+Confirmed via the real dashboard on the test VM, and it caught two
+real bugs bats' stubbed tests hadn't (see the wiki's Lessons Learned
+page): `unit_state`'s existence check doesn't work for
+template-instantiated unit names, and `zfs list`'s tab-separated
+output rendered as visually cramped/misaligned in whiptail's textbox.
+Both fixed.
 
 ### Remaining scope, not yet validated against real hardware
 
