@@ -49,6 +49,32 @@ EOF
     [ -z "$(PATH="${TEST_TMPDIR}/bin:${PATH}" devices_with_clevis_bindings)" ]
 }
 
+@test "uninstall_action_forget_device's crypttab/fstab patterns remove only the exact mapper's line" {
+    # Regression test for a real gap found during real-hardware
+    # testing: after a Danger Zone erase (menu 11), a device's
+    # crypttab entry has no working unlock method left (all keyslots
+    # destroyed) and no "nofail" option, so it can hang the next boot.
+    # There was no menu action anywhere to remove that entry. This
+    # tests the exact regex patterns uninstall_action_forget_device
+    # builds -- not the full interactive flow (whiptail-dependent, not
+    # exercised elsewhere in this file either) -- confirming a mapper
+    # name that is a prefix of another (e.g. "disk1" vs "disk10") is
+    # not over-matched.
+    WARDEN_CRYPTTAB="${TEST_TMPDIR}/crypttab"
+    WARDEN_FSTAB="${TEST_TMPDIR}/fstab"
+    printf 'disk1 UUID=uuid1 none luks,_netdev\ndisk10 UUID=uuid10 none luks,_netdev\n' > "$WARDEN_CRYPTTAB"
+    printf '/dev/mapper/disk1 /mnt/disk1 ext4 defaults,nofail 0 2\n/dev/mapper/disk10 /mnt/disk10 ext4 defaults,nofail 0 2\n' > "$WARDEN_FSTAB"
+
+    local mapper="disk1"
+    remove_lines_matching "$WARDEN_CRYPTTAB" "^${mapper}[[:space:]]"
+    remove_lines_matching "$WARDEN_FSTAB" "/dev/mapper/${mapper}([[:space:]]|\$)"
+
+    ! grep -q '^disk1[[:space:]]' "$WARDEN_CRYPTTAB"
+    grep -qxF "disk10 UUID=uuid10 none luks,_netdev" "$WARDEN_CRYPTTAB"
+    ! grep -q '/dev/mapper/disk1[[:space:]]' "$WARDEN_FSTAB"
+    grep -qxF "/dev/mapper/disk10 /mnt/disk10 ext4 defaults,nofail 0 2" "$WARDEN_FSTAB"
+}
+
 @test "uninstall_action_unbind_device's slot loop uses the same hard non-Clevis gate as menu 8" {
     # Not a full interactive test (whiptail-dependent), but confirms
     # run_clevis_luks_unbind -- the function this action loops over --

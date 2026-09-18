@@ -26,12 +26,14 @@ feature_uninstall_menu() {
     action="$(warden_menu "Uninstall / revert" "What do you want to revert? Each action is independent -- picking one does not affect the others." \
         lateboot "Disable the late-boot unlocker only (revert to manual unlock)" \
         unbind "Unbind Clevis from a device (revert to manual unlock for that device)" \
+        forget "Remove crypttab/fstab entries for a device Warden no longer manages" \
         dropins "Remove Warden-added systemd drop-ins (e.g. Tailscale ordering)" \
         packages "Uninstall Tang/Clevis packages")" || return 0
 
     case "$action" in
         lateboot) uninstall_action_disable_lateboot ;;
         unbind) uninstall_action_unbind_device ;;
+        forget) uninstall_action_forget_device ;;
         dropins) uninstall_action_remove_dropins ;;
         packages) uninstall_action_remove_packages ;;
     esac
@@ -85,6 +87,48 @@ uninstall_action_unbind_device() {
     else
         warden_msg "Done" "All Clevis bindings removed from ${dev}. It now requires the LUKS passphrase to unlock.\n\nRemaining bindings:\n\n$(describe_slots "$dev")"
     fi
+}
+
+# uninstall_action_forget_device — remove a device's crypttab (and
+# fstab, if present) entry entirely.
+#
+# Found missing during real-hardware testing of the Danger Zone erase
+# (menu 11): after an erase, every keyslot is gone, so the device can
+# never unlock again -- but its crypttab entry has no "nofail" option
+# (see build_crypttab_line in lib/features/luks_enroll.sh), so leaving
+# it in place risks hanging the next boot waiting to unlock a device
+# that has no possible correct answer anymore. "unbind" above doesn't
+# help here: it reverts to manual passphrase unlock, which assumes a
+# working passphrase keyslot still exists. This only touches
+# crypttab/fstab -- never the LUKS header, keyslots, or Clevis bindings.
+uninstall_action_forget_device() {
+    local -a menu_items=()
+    local dev uuid mapper
+    while read -r dev uuid mapper; do
+        [[ -n "$dev" ]] || continue
+        menu_items+=("$dev" "mapper: ${mapper}")
+    done < <(managed_luks_devices)
+
+    if [[ "${#menu_items[@]}" -eq 0 ]]; then
+        warden_msg "Nothing to do" "No managed device (with a crypttab entry) was found."
+        return 0
+    fi
+
+    dev="$(warden_menu "Select a device" "Managed devices:" "${menu_items[@]}")" || return 0
+    uuid="$(uuid_for_device "$dev")"
+    mapper="$(crypttab_mapper_for_uuid "$uuid")"
+
+    local bindings
+    bindings="$(clevis_pins_for_device "$dev")"
+
+    if ! warden_yesno "Remove crypttab/fstab entries for ${dev}" "Mapper: ${mapper}\nUUID: ${uuid}\nClevis bindings: ${bindings:-none}\n\nThis removes ${mapper}'s entry from ${WARDEN_CRYPTTAB} (and ${WARDEN_FSTAB}, if present), so systemd stops trying to unlock/mount it at boot.\n\nUse this once a device is done being managed by Warden -- most importantly after a Danger Zone erase (menu 11), since a device with no key slots left can never unlock again, and an entry left behind for it can hang the next boot.\n\nThis does NOT touch the LUKS header, keyslots, or any Clevis binding on the device itself -- only the crypttab/fstab entries.\n\nProceed?"; then
+        return 0
+    fi
+
+    remove_lines_matching "$WARDEN_CRYPTTAB" "^${mapper}[[:space:]]"
+    remove_lines_matching "$WARDEN_FSTAB" "/dev/mapper/${mapper}([[:space:]]|\$)"
+
+    warden_msg "Done" "${mapper}'s crypttab/fstab entries have been removed (backed up first)."
 }
 
 uninstall_action_remove_dropins() {

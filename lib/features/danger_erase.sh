@@ -100,5 +100,13 @@ feature_danger_erase_menu() {
         return 0
     fi
 
-    danger_msg "Erase complete. ${dev} (${uuid}) has had all key slots and its LUKS header destroyed. The bulk data area was not overwritten, but with no key slot remaining, the data on it is permanently unrecoverable. This is the NIST SP 800-88 Purge-level sanitisation this action was for."
+    local completion="Erase complete. ${dev} (${uuid}) has had all key slots and its LUKS header destroyed. The bulk data area was not overwritten, but with no key slot remaining, the data on it is permanently unrecoverable. This is the NIST SP 800-88 Purge-level sanitisation this action was for."
+
+    local mapper
+    mapper="$(crypttab_mapper_for_uuid "$uuid")"
+    if [[ -n "$mapper" ]]; then
+        completion+="\n\nThis device still has a /etc/crypttab entry (mapper: ${mapper}). With no key slot left, it can never unlock again -- leaving that entry in place risks hanging the next boot waiting for it. Use menu 12 (Uninstall / revert) to remove its crypttab/fstab entries once you're done with this device."
+    fi
+
+    danger_msg "$completion"
 }

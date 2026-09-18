@@ -31,7 +31,12 @@ banner so it never looks like a routine screen.
    --batch-mode`.
 6. Explains again afterward: key slots and header are gone: data is
    now permanently unrecoverable, even though the bulk data area
-   itself was never touched.
+   itself was never touched. If the erased device still has a
+   `/etc/crypttab` entry, the completion message says so explicitly
+   and points to menu 12's "remove crypttab/fstab entries" action —
+   with no key slot left, the device can never unlock again, and its
+   crypttab entry has no `nofail` option, so leaving it in place risks
+   hanging the next boot.
 
 See the wiki's confirmation-phrase design notes for why `ERASE
 <fragment>` was chosen over either a longer typed phrase or a plain

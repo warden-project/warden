@@ -39,3 +39,28 @@ append_line_if_missing() {
     log_diff "${file} (backup: ${backup})" "$before" "$after"
     rm -f "$before" "$after"
 }
+
+# remove_lines_matching <file> <extended-regex>
+# Backs up first, then removes every line matching <extended-regex>
+# (grep -E). A no-op, with no backup taken, if nothing matches --
+# mirrors append_line_if_missing's idempotency for the inverse case.
+remove_lines_matching() {
+    local file="$1" pattern="$2"
+    [[ -f "$file" ]] || return 0
+    if ! grep -qE "$pattern" "$file"; then
+        log_line "PATCH: no line matching '${pattern}' in ${file}, skipping"
+        return 0
+    fi
+    local backup before after tmp
+    before="$(mktemp)"
+    cp -p "$file" "$before"
+    backup="$(backup_file "$file")"
+    tmp="$(mktemp)"
+    grep -vE "$pattern" "$file" > "$tmp"
+    cp "$tmp" "$file"
+    rm -f "$tmp"
+    after="$(mktemp)"
+    cp -p "$file" "$after"
+    log_diff "${file} (backup: ${backup})" "$before" "$after"
+    rm -f "$before" "$after"
+}

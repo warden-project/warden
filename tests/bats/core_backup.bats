@@ -40,3 +40,28 @@ teardown() { warden_test_teardown; }
     [ "$(sed -n '1p' "$target")" = "unrelated-a UUID=aaa none defaults" ]
     [ "$(sed -n '2p' "$target")" = "unrelated-b UUID=bbb none defaults" ]
 }
+
+@test "remove_lines_matching removes only the matching line and backs up first" {
+    local target
+    target="${TEST_TMPDIR}/crypttab"
+    printf 'keep-a UUID=aaa none defaults\ngone UUID=bbb none luks,_netdev\nkeep-b UUID=ccc none defaults\n' > "$target"
+    remove_lines_matching "$target" "^gone[[:space:]]"
+    grep -qxF "keep-a UUID=aaa none defaults" "$target"
+    grep -qxF "keep-b UUID=ccc none defaults" "$target"
+    ! grep -q '^gone' "$target"
+    [ "$(find "$WARDEN_BACKUP_DIR" -name 'crypttab.*.bak' | wc -l)" -eq 1 ]
+}
+
+@test "remove_lines_matching is a no-op (and takes no backup) when nothing matches" {
+    local target
+    target="${TEST_TMPDIR}/crypttab"
+    printf 'keep-a UUID=aaa none defaults\n' > "$target"
+    remove_lines_matching "$target" "^nonexistent[[:space:]]"
+    grep -qxF "keep-a UUID=aaa none defaults" "$target"
+    [ "$(find "$WARDEN_BACKUP_DIR" -name 'crypttab.*.bak' 2>/dev/null | wc -l)" -eq 0 ]
+}
+
+@test "remove_lines_matching does nothing when the file doesn't exist" {
+    run remove_lines_matching "${TEST_TMPDIR}/does-not-exist" "^anything"
+    [ "$status" -eq 0 ]
+}

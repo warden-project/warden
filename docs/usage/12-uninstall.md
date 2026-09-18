@@ -16,6 +16,18 @@ the top of `lib/features/uninstall.sh`.
   of no return for automatic unlocking on that specific device). Uses
   the same hard non-Clevis-slot gate as menu 8, so it's just as
   incapable of touching a bare passphrase or keyfile slot.
+- **Remove crypttab/fstab entries for a device** — shows the device's
+  mapper, UUID, and current Clevis bindings, then removes its
+  `/etc/crypttab` (and `/etc/fstab`, if present) entries only. Doesn't
+  touch the LUKS header, keyslots, or any Clevis binding. This is the
+  action to use once a device is done being managed by Warden — most
+  importantly right after a Danger Zone erase (menu 11): with every
+  keyslot destroyed, that device can never unlock again, and its
+  crypttab entry has no `nofail` option, so leaving it in place risks
+  hanging the next boot waiting on it. "Unbind Clevis from a device"
+  above doesn't help in that case, since it reverts to manual
+  passphrase unlock — which assumes a working passphrase keyslot still
+  exists.
 - **Remove Warden-added systemd drop-ins** — lists existing Tailscale
   ordering drop-ins, backs up and removes the chosen one. Only removes
   the ordering hint; the device still auto-unlocks, just without
