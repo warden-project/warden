@@ -146,14 +146,21 @@ feature_luks_setup_menu() {
         passphrase="$(whiptail --passwordbox "Enter a strong recovery passphrase:" 12 70 3>&1 1>&2 2>&3)" || return 0
     fi
 
-    local fs_kind
-    fs_kind="$(warden_menu "Filesystem" "What should this device hold?" \
-        filesystem "A plain filesystem (ext4 by default; you can type any mkfs.<type> at the next prompt)" \
-        zfs "A single-disk ZFS pool (auto-imports/mounts after unlock; no /etc/fstab entry)")" || return 0
+    # Only ask "what should this device hold" at all if ZFS is actually
+    # available -- zfsutils-linux is an optional install (menu 1), and
+    # someone who never installed it shouldn't be stopped by an extra
+    # menu screen for a choice they can't act on. Anyone who hasn't
+    # opted into ZFS gets exactly the original ext4-only flow back.
+    if is_pkg_installed zfsutils-linux; then
+        local fs_kind
+        fs_kind="$(warden_menu "Filesystem" "What should this device hold?" \
+            filesystem "A plain filesystem (ext4 by default; you can type any mkfs.<type> at the next prompt)" \
+            zfs "A single-disk ZFS pool (auto-imports/mounts after unlock; no /etc/fstab entry)")" || return 0
 
-    if [[ "$fs_kind" == "zfs" ]]; then
-        luks_setup_zfs_flow "$dev" "$passphrase" "$pin_type" "$pin_config"
-        return 0
+        if [[ "$fs_kind" == "zfs" ]]; then
+            luks_setup_zfs_flow "$dev" "$passphrase" "$pin_type" "$pin_config"
+            return 0
+        fi
     fi
 
     local fstype

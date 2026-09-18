@@ -207,3 +207,22 @@ EOF
     [ -n "$uuid" ]
     losetup -d "$loopdev"
 }
+
+@test "feature_luks_setup_menu only offers the filesystem-kind choice when zfsutils-linux is installed" {
+    # zfsutils-linux is an optional install (menu 1) -- someone who
+    # never installed it shouldn't be stopped by an extra "what should
+    # this device hold" menu screen for a choice they can't act on
+    # anyway. Not a full interactive test (whiptail-dependent, not
+    # exercised elsewhere in this file either); confirms the actual
+    # gating condition is present in the function body.
+    local body
+    body="$(declare -f feature_luks_setup_menu)"
+    [[ "$body" == *'is_pkg_installed zfsutils-linux'* ]]
+    # And that the gate wraps the fs_kind prompt, not something else --
+    # the "zfs" menu tag must appear only inside that same if-block.
+    local before_if after_if
+    before_if="${body%%is_pkg_installed zfsutils-linux*}"
+    after_if="${body#*is_pkg_installed zfsutils-linux}"
+    [[ "$before_if" != *'"zfs"'* ]]
+    [[ "$after_if" == *'"zfs"'* ]]
+}

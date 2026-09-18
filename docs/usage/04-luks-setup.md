@@ -15,8 +15,12 @@ configuration (menu 3) first.
 3. Offers to generate a strong recovery passphrase (shown once, with a
    "save this now" warning, never written to the log) or lets you enter
    your own.
-4. Asks what the device should hold: a plain filesystem (default
-   `ext4`, or type any `mkfs.<type>`) or a single-disk ZFS pool.
+4. If `zfsutils-linux` is installed (menu 1, optional), asks what the
+   device should hold: a plain filesystem (default `ext4`, or type any
+   `mkfs.<type>`) or a single-disk ZFS pool. If it isn't installed,
+   this extra choice is skipped entirely and you go straight to the
+   filesystem-type prompt below, exactly as if ZFS support didn't
+   exist — no dead-end menu screen for a choice you can't act on.
 5. Supports a dry-run preview, like every other wizard.
 6. Plain filesystem: runs `cryptsetup luksFormat`, opens the device
    under a throwaway name to create the filesystem, then closes it
