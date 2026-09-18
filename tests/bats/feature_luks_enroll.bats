@@ -197,3 +197,19 @@ EOF
     WARDEN_DRY_RUN=0 ensure_tailscale_ordering_dropin "data-disk"
     grep -q "already present for data-disk, skipping" "$WARDEN_LOG_FILE"
 }
+
+@test "complete_enrolment enables remote-cryptsetup.target unconditionally" {
+    # Regression test for a real bug found via an actual reboot on real
+    # hardware: crypttab's _netdev option (used on every entry Warden
+    # creates) routes the device's systemd-cryptsetup@ unit exclusively
+    # through remote-cryptsetup.target, which is disabled by default on
+    # Ubuntu. A device WITH an fstab entry still unlocked at boot (the
+    # fstab-generator wires a direct dependency onto the specific unit),
+    # but a device enrolled with mountpoint "none" had nothing else to
+    # pull that unit in -- it silently never even attempted to unlock,
+    # no error anywhere, indistinguishable from working right up until
+    # an actual reboot. Not gated on mountpoint being "none": the fix
+    # must run unconditionally so it doesn't depend on correctly
+    # predicting every case that needs it.
+    declare -f complete_enrolment | grep -q 'ensure_systemd_unit_enabled "remote-cryptsetup.target"'
+}

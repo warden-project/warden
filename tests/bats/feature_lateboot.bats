@@ -11,6 +11,7 @@ teardown() { warden_test_teardown; }
     [[ "$out" == *"clevis-systemd: installed"* ]]
     [[ "$out" == *"${WARDEN_ASKPASS_PATH_UNIT} enabled:"* ]]
     [[ "$out" == *"${WARDEN_ASKPASS_PATH_UNIT} state:"* ]]
+    [[ "$out" == *"remote-cryptsetup.target enabled:"* ]]
 }
 
 @test "describe_lateboot_status reports 'not present' for a unit that doesn't exist on this system" {

@@ -20,3 +20,16 @@ Enabling this unit doesn't by itself guarantee any specific device
 unlocks at boot — that also depends on the device having a working
 Clevis binding (menus 4/5) and its Tang server(s) being reachable at
 boot time.
+
+Also enables `remote-cryptsetup.target` (idempotent). Confirmed via an
+actual reboot test on real hardware: crypttab's `_netdev` option (used
+on every entry menus 4/5 create) routes a device's `systemd-cryptsetup@`
+unit exclusively through `remote-cryptsetup.target`, not the plain
+`cryptsetup.target` — and that target is disabled by default on Ubuntu.
+A device with an fstab entry still unlocked correctly regardless (the
+fstab-generator wires a direct dependency onto the specific unit), but
+a device enrolled with mountpoint "none" had nothing else to pull that
+unit in at all — it silently never even attempted to unlock, no error
+anywhere. Menus 4/5 now enable this target unconditionally at
+enrolment time; this menu re-asserts it for anything enrolled before
+that fix landed.

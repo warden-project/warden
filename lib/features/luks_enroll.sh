@@ -197,6 +197,20 @@ feature_luks_enrol_menu() {
 # wizard and the LUKS setup wizard (menu 4) once it hands off a
 # freshly-formatted device -- so a device is only ever enrolled one
 # way, and menu 4 never has to re-prompt for a passphrase it just set.
+#
+# Confirmed on real hardware via an actual reboot test: build_crypttab_line's
+# `_netdev` option makes systemd route the generated systemd-cryptsetup@
+# unit exclusively through remote-cryptsetup.target, NOT cryptsetup.target
+# -- and remote-cryptsetup.target is disabled by default on Ubuntu. A
+# device with an fstab entry still unlocks at boot (the fstab-generator
+# wires a direct dependency from that mount unit onto the specific
+# cryptsetup unit, bypassing remote-cryptsetup.target entirely), but a
+# device enrolled with mountpoint "none" has nothing else to pull that
+# unit in -- it silently never even attempts to unlock, with no error
+# anywhere, even though clevis-luks-askpass.path is enabled and correct.
+# ensure_systemd_unit_enabled below closes that gap unconditionally, not
+# just when mountpoint is "none": it's a one-line, no-downside fix that
+# doesn't depend on correctly predicting every case that needs it.
 complete_enrolment() {
     local dev="$1" uuid="$2" mapper="$3" mountpoint="$4" fstype="$5" passphrase="$6" pin_type="$7" pin_config="$8"
 
@@ -232,6 +246,7 @@ complete_enrolment() {
 
     append_line_if_missing "$WARDEN_CRYPTTAB" "$crypttab_line"
     [[ -n "${fstab_line:-}" ]] && append_line_if_missing "$WARDEN_FSTAB" "$fstab_line"
+    ensure_systemd_unit_enabled "remote-cryptsetup.target"
     [[ "$needs_tailscale_dropin" == "1" ]] && ensure_tailscale_ordering_dropin "$mapper"
 
     if ! run_clevis_luks_bind "$dev" "$passphrase" "$pin_type" "$pin_config" >/dev/null; then
