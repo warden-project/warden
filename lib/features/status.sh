@@ -72,8 +72,23 @@ render_status_report() {
             echo "Mapper:   $mapper (in /etc/crypttab)"
             local zfs_unit="warden-zfs-import@${mapper}.service"
             if is_systemd_unit_enabled "$zfs_unit" 2>/dev/null; then
-                echo "ZFS:      ${zfs_unit} enabled, state: $(unit_state "$zfs_unit")"
-                describe_zfs_pool_status "$mapper" | sed 's/^/          /'
+                # Not unit_state here: confirmed on real hardware that
+                # `systemctl list-unit-files <specific-instance>` (what
+                # unit_state's existence check relies on) only ever
+                # lists the template itself (warden-zfs-import@.service),
+                # never a specific instance name -- so it always
+                # reports "not present" for a template-instantiated
+                # unit regardless of real state. Already known to exist
+                # here (that's what the enabled check above just
+                # confirmed), so is-active alone is enough.
+                local zfs_active="inactive"
+                systemctl is-active --quiet "$zfs_unit" 2>/dev/null && zfs_active="active"
+                echo "ZFS:      ${zfs_unit} enabled, state: ${zfs_active}"
+                # zfs list's default tab-separated output renders as
+                # visually cramped/misaligned in whiptail's textbox
+                # (confirmed on real hardware); a single space between
+                # fields reads cleanly instead.
+                describe_zfs_pool_status "$mapper" | tr '\t' ' ' | sed 's/^/          /'
             elif fstab_has_mapper "$mapper"; then
                 echo "fstab:    entry present"
             else

@@ -109,18 +109,32 @@ EOF
     export -f crypttab_mapper_for_uuid
     is_systemd_unit_enabled() { [ "$1" = "warden-zfs-import@tank1.service" ]; }
     export -f is_systemd_unit_enabled
-    unit_state() { echo "active"; }
-    export -f unit_state
-    describe_zfs_pool_status() { printf 'pool: tank1\nstate: ONLINE\n'; }
+    # Not stubbing unit_state: confirmed on real hardware that
+    # `systemctl list-unit-files <specific-instance>` (what its
+    # existence check relies on) never matches a template-instantiated
+    # unit name, so it always reported "not present" here regardless
+    # of real state -- the fix calls `systemctl is-active` directly
+    # instead, stubbed via PATH below.
+    mkdir -p "${TEST_TMPDIR}/bin"
+    cat > "${TEST_TMPDIR}/bin/systemctl" <<'EOF'
+#!/usr/bin/env bash
+[ "$1" = "is-active" ]
+EOF
+    chmod +x "${TEST_TMPDIR}/bin/systemctl"
+    describe_zfs_pool_status() { printf 'pool: tank1\nname\tmounted\tmountpoint\ntank1\tyes\t/mnt/tank1\n'; }
     export -f describe_zfs_pool_status
     clevis_pins_for_device() { :; }
     export -f clevis_pins_for_device
 
     local out
-    out="$(render_status_report)"
+    out="$(PATH="${TEST_TMPDIR}/bin:${PATH}" render_status_report)"
     [[ "$out" == *"ZFS:      warden-zfs-import@tank1.service enabled, state: active"* ]]
     [[ "$out" == *"pool: tank1"* ]]
-    [[ "$out" == *"state: ONLINE"* ]]
+    # Tabs must be rendered as spaces, not left as literal tab
+    # characters (confirmed on real hardware: whiptail's textbox
+    # renders those as visually cramped/misaligned).
+    [[ "$out" == *"tank1 yes /mnt/tank1"* ]]
+    [[ "$out" != *$'tank1\tyes'* ]]
     [[ "$out" != *"fstab:"* ]]
 }
 
