@@ -198,6 +198,30 @@ feature_luks_enrol_menu() {
         return 0
     fi
 
+    local passphrase
+    passphrase="$(whiptail --passwordbox "Enter this device's EXISTING LUKS passphrase, to authorise adding the new Clevis binding:" 12 70 3>&1 1>&2 2>&3)" || return 0
+
+    # A closed LUKS device gives no visibility into what's inside it --
+    # open it now (before asking anything else) to check whether it's
+    # already a ZFS pool member, which needs a different enrolment path
+    # (see luks_enrol_zfs_flow). Only bother if zfsutils-linux is even
+    # installed, same reasoning as menu 4's gate on the same check.
+    if is_pkg_installed zfsutils-linux; then
+        local probe_mapper="warden-probe-$$"
+        printf '%s' "$passphrase" | cryptsetup open --batch-mode "$dev" "$probe_mapper" - >>"$WARDEN_LOG_FILE" 2>&1
+        if [[ -e "/dev/mapper/${probe_mapper}" ]]; then
+            if is_zfs_pool_member "/dev/mapper/${probe_mapper}"; then
+                luks_enrol_zfs_flow "$dev" "$uuid" "$probe_mapper" "$passphrase" "$pin_type" "$pin_config"
+                return 0
+            fi
+            cryptsetup close "$probe_mapper" 2>/dev/null
+        fi
+        # If opening failed here, fall through to the generic flow
+        # below rather than failing outright -- its own attempt (via
+        # run_clevis_luks_bind) surfaces the same wrong-passphrase
+        # error either way, without a second, ZFS-specific message.
+    fi
+
     local existing_names
     existing_names="$(crypttab_mapper_names | tr '\n' ' ')"
     local mapper
@@ -215,10 +239,66 @@ feature_luks_enrol_menu() {
         fstype="$(whiptail --inputbox "Filesystem type on this device:" 10 60 "ext4" 3>&1 1>&2 2>&3)" || return 0
     fi
 
-    local passphrase
-    passphrase="$(whiptail --passwordbox "Enter this device's EXISTING LUKS passphrase, to authorise adding the new Clevis binding:" 12 70 3>&1 1>&2 2>&3)" || return 0
-
     complete_enrolment "$dev" "$uuid" "$mapper" "$mountpoint" "$fstype" "$passphrase" "$pin_type" "$pin_config"
+}
+
+# luks_enrol_zfs_flow <dev> <uuid> <probe_mapper> <passphrase> <pin_type> <pin_config>
+#
+# Reached from feature_luks_enrol_menu once opening the device to
+# inspect its contents revealed it's already a ZFS pool member.
+# <probe_mapper> is already open on this device under a throwaway name
+# at this point.
+#
+# Unlike menu 4 (which creates a brand-new pool and can freely choose
+# the mapper name to also become the pool name), this pool already has
+# a name, chosen whenever it was first created -- possibly under a
+# different mapper name, or even on a different host. The
+# warden-zfs-import@.service template assumes mapper name == pool name
+# (see zfs_pool.sh), so the mapper name here isn't a free choice: it's
+# locked to the pool's own existing name.
+luks_enrol_zfs_flow() {
+    local dev="$1" uuid="$2" probe_mapper="$3" passphrase="$4" pin_type="$5" pin_config="$6"
+
+    local pool_name
+    pool_name="$(discover_unimported_zfs_pool_name)"
+    if [[ -z "$pool_name" ]]; then
+        warden_msg "Could not identify the ZFS pool" "${dev} looks like a ZFS pool member, but the pool name could not be determined (zpool import -d /dev/mapper found nothing importable). Check the session log at ${WARDEN_LOG_FILE} and investigate manually."
+        cryptsetup close "$probe_mapper" 2>/dev/null
+        return 0
+    fi
+
+    if ! is_valid_mapper_name "$pool_name"; then
+        warden_msg "Can't reuse this pool's name" "This device's ZFS pool is named '${pool_name}', which is either not usable as a crypttab mapper name (letters, numbers, -, _ only) or is already in use by another entry in ${WARDEN_CRYPTTAB}.\n\nSince this design reuses one name for both the mapper and the pool, resolve that conflict manually (e.g. rename the crypttab entry that's already using it) before enrolling this device."
+        cryptsetup close "$probe_mapper" 2>/dev/null
+        return 0
+    fi
+
+    if ! warden_yesno "ZFS pool detected" "${dev} is a member of ZFS pool '${pool_name}'.\n\nEnrolling it will use '${pool_name}' as both the crypttab mapper name and the pool name (they must match).\n\nProceed?"; then
+        cryptsetup close "$probe_mapper" 2>/dev/null
+        return 0
+    fi
+
+    # The probe mapping used a throwaway name; reopen under the pool's
+    # real name instead, since that's what crypttab and the boot-time
+    # import unit will use from here on.
+    cryptsetup close "$probe_mapper" 2>/dev/null
+    printf '%s' "$passphrase" | cryptsetup open --batch-mode "$dev" "$pool_name" - >>"$WARDEN_LOG_FILE" 2>&1
+    if [[ ! -e "/dev/mapper/${pool_name}" ]]; then
+        warden_msg "Failed to reopen device" "Could not reopen ${dev} as ${pool_name}. Check the session log at ${WARDEN_LOG_FILE}."
+        return 0
+    fi
+
+    if ! run_cmd "import zpool ${pool_name}" -- zpool import -d /dev/mapper "$pool_name" >/dev/null; then
+        warden_msg "Import failed" "zpool import did not succeed. Check the session log at ${WARDEN_LOG_FILE}."
+        return 0
+    fi
+    run_cmd "mount zpool ${pool_name} datasets" -- zfs mount -a >/dev/null
+
+    local mountpoint
+    mountpoint="$(zfs list -H -o mountpoint "$pool_name" 2>/dev/null | head -n1)"
+    [[ -z "$mountpoint" || "$mountpoint" == "-" ]] && mountpoint="(none reported)"
+
+    complete_enrolment "$dev" "$uuid" "$pool_name" "$mountpoint" "zfs" "$passphrase" "$pin_type" "$pin_config"
 }
 
 # complete_enrolment <dev> <uuid> <mapper> <mountpoint|none> <fstype> <passphrase> <pin_type> <pin_config>

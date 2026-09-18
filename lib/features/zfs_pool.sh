@@ -122,6 +122,21 @@ is_zfs_pool_member() {
     [[ "$(lsblk -dno FSTYPE "$dev" 2>/dev/null)" == "zfs_member" ]]
 }
 
+# discover_unimported_zfs_pool_name — the name of the first zpool
+# `zpool import` can see among currently-open /dev/mapper devices, or
+# empty if none.
+#
+# Used when enrolling an existing device (menu 5) whose pool name
+# isn't known in advance -- unlike menu 4, which creates a brand-new
+# pool and gets to choose its name (reusing the mapper name), an
+# existing pool already has a name, chosen whenever it was first
+# created, possibly under a different mapper name or even on a
+# different host.
+discover_unimported_zfs_pool_name() {
+    zpool import -d /dev/mapper 2>/dev/null | awk '/^[[:space:]]*pool:/ {print $2; exit}'
+    return 0
+}
+
 # describe_zfs_pool_status <pool> — zpool health plus dataset mount
 # state, for the status dashboard. Handles "not currently imported"
 # explicitly rather than letting zpool/zfs's own error text leak

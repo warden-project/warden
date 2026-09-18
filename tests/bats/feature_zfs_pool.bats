@@ -59,6 +59,49 @@ teardown() { warden_test_teardown; }
     rmdir "/mnt/${mapper}" 2>/dev/null || true
 }
 
+@test "discover_unimported_zfs_pool_name finds a pool exported and reopened under a different mapper name" {
+    # Regression coverage for menu 5's re-enrolment path: an existing
+    # pool's name is not known in advance (unlike menu 4, which
+    # chooses it), and isn't necessarily the same as whatever mapper
+    # name it happens to be opened under right now -- e.g. after
+    # moving a drive between hosts, or a throwaway probe name used
+    # purely to inspect the device's contents.
+    if [ "$(id -u)" -ne 0 ]; then
+        skip "requires root for losetup/cryptsetup/zpool"
+    fi
+    if ! command -v zpool >/dev/null 2>&1; then
+        skip "requires zfsutils-linux"
+    fi
+    local img loopdev pool="warden-test-existing-$$" probe="warden-test-probe-$$"
+    img="${TEST_TMPDIR}/existingzfs.img"
+    truncate -s 200M "$img"
+    loopdev="$(losetup -f --show "$img")"
+    warden_test_luks_format "$loopdev" "test-passphrase-123"
+
+    create_zfs_pool "$loopdev" "test-passphrase-123" "$pool" "/mnt/${pool}"
+    zpool export "$pool"
+    cryptsetup close "$pool"
+
+    printf 'test-passphrase-123' | cryptsetup open --batch-mode "$loopdev" "$probe" -
+    is_zfs_pool_member "/dev/mapper/${probe}"
+
+    [ "$(discover_unimported_zfs_pool_name)" = "$pool" ]
+
+    cryptsetup close "$probe"
+    losetup -d "$loopdev"
+    rmdir "/mnt/${pool}" 2>/dev/null || true
+}
+
+@test "discover_unimported_zfs_pool_name is empty when nothing is importable" {
+    mkdir -p "${TEST_TMPDIR}/bin"
+    cat > "${TEST_TMPDIR}/bin/zpool" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+    chmod +x "${TEST_TMPDIR}/bin/zpool"
+    [ -z "$(PATH="${TEST_TMPDIR}/bin:${PATH}" discover_unimported_zfs_pool_name)" ]
+}
+
 @test "ensure_zfs_import_unit_template_installed writes the expected unit content" {
     if [ "$(id -u)" -ne 0 ]; then
         skip "requires root for systemctl daemon-reload"

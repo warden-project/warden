@@ -254,3 +254,34 @@ EOF
     # predicting every case that needs it.
     declare -f complete_enrolment | grep -q 'ensure_systemd_unit_enabled "remote-cryptsetup.target"'
 }
+
+@test "feature_luks_enrol_menu only probes for an existing ZFS pool when zfsutils-linux is installed" {
+    # Not a full interactive test (whiptail-dependent, same as the
+    # menu 4 equivalent test in feature_luks_setup.bats) -- confirms
+    # the gating condition is present, mirroring menu 4's reasoning:
+    # zfsutils-linux is an optional install, so a device shouldn't get
+    # opened just to probe its contents for someone who never
+    # installed the tool that would do anything useful with the answer.
+    local body
+    body="$(declare -f feature_luks_enrol_menu)"
+    [[ "$body" == *'is_pkg_installed zfsutils-linux'* ]]
+    local before_if after_if
+    before_if="${body%%is_pkg_installed zfsutils-linux*}"
+    after_if="${body#*is_pkg_installed zfsutils-linux}"
+    [[ "$before_if" != *'is_zfs_pool_member'* ]]
+    [[ "$after_if" == *'is_zfs_pool_member'* ]]
+}
+
+@test "luks_enrol_zfs_flow validates the discovered pool name before using it as the mapper name" {
+    # Not a full interactive test (whiptail-dependent); confirms the
+    # actual validation call is present. Unlike menu 4 (which invents
+    # a new mapper/pool name and can freely re-prompt on an invalid
+    # one), an existing pool's name isn't a free choice -- it's fixed
+    # already, so an invalid or colliding name must refuse outright
+    # rather than silently writing a broken crypttab entry.
+    local body
+    body="$(declare -f luks_enrol_zfs_flow)"
+    [[ "$body" == *'discover_unimported_zfs_pool_name'* ]]
+    [[ "$body" == *'is_valid_mapper_name "$pool_name"'* ]]
+    [[ "$body" == *'"zfs"'* ]]
+}
