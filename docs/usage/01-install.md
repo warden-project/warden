@@ -12,6 +12,8 @@ what each component does, before asking what to install.
 - Optionally offers `clevis-tpm2` (TPM2 pin support) when Clevis is
   selected, with a one-line note that PCR-sealed bindings can break
   after firmware/kernel updates.
+- Optionally offers `zfsutils-linux` when Clevis is selected, letting
+  menus 4/5 create or enrol a device as a single-disk ZFS pool.
 - Confirms Ubuntu's `universe` archive is enabled first, enabling it if
   not.
 - Every install check is idempotent: already-installed packages are

@@ -24,12 +24,21 @@ device = one zpool, matching the existing 1:1 device model exactly —
 no mirror/raidz, no multi-device pickers). Fits into menus 4/5 as a
 filesystem-type choice alongside ext4/etc., not a separate menu.
 
+**Status: menu 1 (install) and menu 4 (new device) are done, and
+validated end-to-end through the real TUI on real hardware, including
+a full reboot proving auto-unlock → auto-import → auto-mount with no
+manual intervention.** Menu 5 (enrol an *existing* ZFS-backed device),
+menu 7 (status dashboard), and menu 12 (uninstall) ZFS-awareness are
+not started — see "Remaining scope" below.
+
 **Architecture below is validated against real hardware** (Ubuntu
 24.04 VM, real reboots, not just read from docs) — see the wiki's
-Lessons Learned page for the two real bugs this testing found and
-fixed along the way (a pre-existing, ZFS-unrelated boot-unlock gap for
-any "no mountpoint" device, and a genuine systemd ordering-cycle trap
-in the first ZFS-ordering approach tried).
+Lessons Learned page for the three real bugs this testing found and
+fixed along the way: a pre-existing, ZFS-unrelated boot-unlock gap for
+any "no mountpoint" device, a genuine systemd ordering-cycle trap in
+the first ZFS-ordering approach tried, and cryptsetup refusing a
+second mapping of an already-open device during the enrolment
+wizard's own test-unlock step.
 
 ### What changes at enrolment time
 
@@ -131,6 +140,22 @@ directionally right, but the *shape* of the fix (a whole dedicated
 per-device unit, not a drop-in on an existing shared unit) only became
 clear by hitting the cycle in practice.
 
+### The enrolment wizard's own test-unlock step needed a fourth fix
+
+`complete_enrolment`'s existing test-unlock (shared by menus 4/5)
+opens a *second*, throwaway-named mapping of the device to prove
+Clevis actually works. For a ZFS device, `create_zfs_pool` has already
+opened the device under its *real* mapper name and left the pool
+imported there — and real testing showed cryptsetup refuses a second
+mapping of the same underlying device outright ("Cannot use device
+... which is in use (already mapped or mounted)", exit 5). Every ZFS
+enrolment reported "test-unlock failed" despite the bind itself having
+succeeded. Fixed with `test_unlock_and_cleanup_zfs`
+(`lib/features/luks_enroll.sh`): export the pool and close the real
+mapping first, run the normal throwaway-name test-unlock, then reopen
+the real mapper and re-import the pool so the operator's session ends
+in the same state it would have without the test running at all.
+
 ### Remaining scope, not yet validated against real hardware
 
 - Menu 5 (enrol an existing device) needs to detect "this LUKS device
@@ -152,13 +177,7 @@ clear by hitting the cycle in practice.
   no ZFS-specific change, but its "still has a crypttab entry" boot-
   hang warning (see Lessons Learned) should also check for and mention
   an enabled `warden-zfs-import@<pool>.service` for the erased device.
-- Package installation (menu 1) needs `zfsutils-linux` as another
-  optional component, following the same explicit-per-package pattern
-  as `tpm2` already does (see the project wiki's Lessons Learned page
-  on the `clevis-systemd` incident — no inferring one package's
-  presence from another's).
-- `is_valid_zpool_name` (new helper, see above) — not yet written.
 
-Not started. Revisit as its own implementation phase — the boot-
-ordering design above is now solid, but menu 5/7/12 integration and
-the actual TUI wiring still need building and testing.
+Revisit menu 5/7/12 as their own follow-up pass — the boot-ordering
+design and menu 1/4 are done and real-hardware-validated, but this
+remaining integration work hasn't been started or tested yet.
