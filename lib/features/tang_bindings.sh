@@ -2,7 +2,7 @@
 # lib/features/tang_bindings.sh — menu 3: Tang servers to trust (bindings)
 #
 # Builds and saves the pin configuration (single tang / sss / tpm2) that
-# the (not yet built) LUKS enrolment wizard will bind devices against.
+# the LUKS enrolment wizard (menu 5) binds devices against.
 # This is deliberately a Day-0 "what do we trust and how" step, separate
 # from binding any specific device.
 #
@@ -391,5 +391,5 @@ print(json.dumps({
 ' "$urls_joined" "$(IFS=,; echo "${is_ts[*]}")" "$(IFS=,; echo "${ts_method[*]}")" "$pin_type" "$pin_config")"
 
     save_bindings_config "$metadata"
-    warden_msg "Saved" "Trust configuration saved to ${WARDEN_BINDINGS_FILE}.\n\nAny address flagged as Tailscale will be offered its systemd ordering drop-in when you enrol a device against this configuration (menu 5, not yet built)."
+    warden_msg "Saved" "Trust configuration saved to ${WARDEN_BINDINGS_FILE}.\n\nAny address flagged as Tailscale will be offered its systemd ordering drop-in when you enrol a device against this configuration (menu 5)."
 }

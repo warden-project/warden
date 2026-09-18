@@ -13,14 +13,14 @@ Read-only. Never changes anything on the system. For every
 Then, across all devices:
 
 - Live reachability (and latency) of every Tang server referenced by
-  any current binding — there's no separate "trusted servers" list
-  until the binding wizard (menu 3) exists, so this is derived from
-  whatever's actually bound right now
+  any current binding — this is derived from whatever's actually
+  bound right now, not the separately-saved trust configuration from
+  menu 3
 - `tangd.socket` and `clevis-luks-askpass.path` status, if the
   relevant package is installed
 - Any Tailscale-ordering systemd drop-ins currently in place
 
 If a device shows as unmanaged (no crypttab entry) or Clevis bindings
 show as "none", that's informational — it's exactly the "wait, is this
-already managed?" situation the enrolment wizard (menu 5, not yet
-built) exists to resolve.
+already managed?" situation the enrolment wizard (menu 5) exists to
+resolve.

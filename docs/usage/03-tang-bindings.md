@@ -1,9 +1,8 @@
 # Menu 3 — Tang servers to trust (bindings)
 
 Builds and saves the pin configuration that the LUKS enrolment wizard
-(menu 5, not yet built) will bind devices against. This is a Day-0
-"what do we trust and how" step, separate from binding any specific
-device.
+(menu 5) binds devices against. This is a Day-0 "what do we trust and
+how" step, separate from binding any specific device.
 
 ## Flow
 
