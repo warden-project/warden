@@ -69,9 +69,20 @@ teardown() { warden_test_teardown; }
     # awk's default field splitting collapses -- silently excluding
     # every blank disk (the primary case this function exists for).
     # A blank disk is exactly "fstype": null in JSON.
+    #
+    # candidate_format_devices also runs every candidate through the
+    # root/boot/efi guard, which makes its own separate lsblk calls
+    # (-rno PATH, -dno UUID) to walk /dev/sda's (nonexistent, in this
+    # test) descendant tree -- only the --json invocation this test
+    # cares about should get the canned fixture below; anything else
+    # must fall through to the real lsblk so the guard sees /dev/sda
+    # as the nonexistent, unrelated device it actually is here.
     mkdir -p "${TEST_TMPDIR}/bin"
-    cat > "${TEST_TMPDIR}/bin/lsblk" <<'EOF'
+    local real_lsblk
+    real_lsblk="$(command -v lsblk)"
+    cat > "${TEST_TMPDIR}/bin/lsblk" <<EOF
 #!/usr/bin/env bash
+if [[ "\$1" == "--json" ]]; then
 cat <<'INNER'
 {
    "blockdevices": [
@@ -79,6 +90,9 @@ cat <<'INNER'
    ]
 }
 INNER
+else
+    exec ${real_lsblk} "\$@"
+fi
 EOF
     chmod +x "${TEST_TMPDIR}/bin/lsblk"
     local out
@@ -93,9 +107,17 @@ EOF
     # real Ubuntu systems -- showing them in the format picker would
     # be actively dangerous). Stub lsblk directly to test the actual
     # disk/part + FSTYPE filtering logic instead.
+    #
+    # As above, only the --json call gets the canned fixture; anything
+    # else (the root/boot/efi guard's own lsblk calls) falls through
+    # to the real lsblk so these fake, nonexistent paths correctly
+    # resolve as unrelated to this machine's actual root/boot/efi.
     mkdir -p "${TEST_TMPDIR}/bin"
-    cat > "${TEST_TMPDIR}/bin/lsblk" <<'EOF'
+    local real_lsblk
+    real_lsblk="$(command -v lsblk)"
+    cat > "${TEST_TMPDIR}/bin/lsblk" <<EOF
 #!/usr/bin/env bash
+if [[ "\$1" == "--json" ]]; then
 cat <<'INNER'
 {
    "blockdevices": [
@@ -106,6 +128,9 @@ cat <<'INNER'
    ]
 }
 INNER
+else
+    exec ${real_lsblk} "\$@"
+fi
 EOF
     chmod +x "${TEST_TMPDIR}/bin/lsblk"
     local out
@@ -114,6 +139,52 @@ EOF
     [[ "$out" == *"/dev/sda1 "*"none"* ]]
     [[ "$out" != *"/dev/sdb"* ]]
     [[ "$out" != *"/dev/loop0"* ]]
+}
+
+@test "candidate_format_devices excludes a device that backs root/boot/efi" {
+    # menu 5's equivalent list (unmanaged_luks_devices) already filters
+    # this way; this device picker was found to not, during real
+    # interactive TUI testing, letting the actual system disk appear
+    # as a formattable candidate. confirm_destructive_device_action
+    # would still refuse the format itself, but there's no reason to
+    # offer a selection that can only ever end in a refusal.
+    mkdir -p "${TEST_TMPDIR}/bin"
+    local real_lsblk
+    real_lsblk="$(command -v lsblk)"
+    cat > "${TEST_TMPDIR}/bin/lsblk" <<EOF
+#!/usr/bin/env bash
+if [[ "\$1" == "--json" ]]; then
+cat <<'INNER'
+{
+   "blockdevices": [
+      {"path": "/dev/fake-root-disk", "fstype": null, "type": "disk"},
+      {"path": "/dev/sdb", "fstype": null, "type": "disk"}
+   ]
+}
+INNER
+else
+    exec ${real_lsblk} "\$@"
+fi
+EOF
+    chmod +x "${TEST_TMPDIR}/bin/lsblk"
+    cat > "${TEST_TMPDIR}/bin/findmnt" <<'EOF'
+#!/usr/bin/env bash
+target=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --target) target="$2"; shift 2 ;;
+        *) shift ;;
+    esac
+done
+if [[ "$target" == "/" ]]; then
+    echo "/dev/fake-root-disk"
+fi
+EOF
+    chmod +x "${TEST_TMPDIR}/bin/findmnt"
+    local out
+    out="$(PATH="${TEST_TMPDIR}/bin:${PATH}" candidate_format_devices)"
+    [[ "$out" != *"/dev/fake-root-disk"* ]]
+    [[ "$out" == *"/dev/sdb"* ]]
 }
 
 @test "candidate_format_devices excludes an already-LUKS-formatted loop device via luks_devices too" {

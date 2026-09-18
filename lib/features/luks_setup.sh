@@ -5,8 +5,9 @@
 # complete_enrolment() logic menu 5 uses, passing along the UUID and
 # passphrase just created so nothing has to be re-entered.
 
-# candidate_format_devices — "<devpath> <fstype-or-none>" for every
-# disk/partition that is not already crypto_LUKS.
+# _raw_format_devices — "<devpath> <fstype-or-none>" for every
+# disk/partition that is not already crypto_LUKS, with no other
+# filtering. Not for direct use -- see candidate_format_devices below.
 #
 # Uses `lsblk --json` rather than raw/awk column parsing: confirmed on
 # real hardware that lsblk's raw mode represents an empty column as
@@ -14,7 +15,7 @@
 # splitting collapses -- silently shifting every later column left and
 # excluding blank disks (the primary case this function exists for)
 # from the result entirely. JSON has no such ambiguity.
-candidate_format_devices() {
+_raw_format_devices() {
     lsblk --json -o PATH,FSTYPE,TYPE 2>/dev/null | python3 -c '
 import json, sys
 data = json.load(sys.stdin)
@@ -25,6 +26,25 @@ for dev in data.get("blockdevices", []):
         continue
     print(dev["path"], dev.get("fstype") or "none")
 '
+}
+
+# candidate_format_devices — _raw_format_devices, minus anything that
+# is or backs root/boot/efi.
+#
+# Found while interactively testing menu 4 on real hardware: this list
+# was showing the whole system disk itself (and its root/boot/efi
+# partitions) as formattable, on a machine where they happen to be
+# non-LUKS. confirm_destructive_device_action's guard would still have
+# refused the actual format, but there's no reason to offer a
+# selection that can only ever end in a refusal -- menu 5's equivalent
+# list (unmanaged_luks_devices) already filters the same way.
+candidate_format_devices() {
+    local dev fstype
+    while read -r dev fstype; do
+        [[ -n "$dev" ]] || continue
+        guard_not_system_critical "$dev" || continue
+        printf '%s %s\n' "$dev" "$fstype"
+    done < <(_raw_format_devices)
 }
 
 generate_passphrase() {
