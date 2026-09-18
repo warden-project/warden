@@ -214,9 +214,12 @@ feature_luks_enrol_menu() {
 complete_enrolment() {
     local dev="$1" uuid="$2" mapper="$3" mountpoint="$4" fstype="$5" passphrase="$6" pin_type="$7" pin_config="$8"
 
+    local is_zfs=0
+    [[ "$fstype" == "zfs" ]] && is_zfs=1
+
     local crypttab_line fstab_line
     crypttab_line="$(build_crypttab_line "$mapper" "$uuid")"
-    if [[ "$mountpoint" != "none" ]]; then
+    if [[ "$is_zfs" != "1" && "$mountpoint" != "none" ]]; then
         fstab_line="$(build_fstab_line "$mapper" "$mountpoint" "$fstype")"
     fi
 
@@ -229,6 +232,9 @@ complete_enrolment() {
 
     local preview="This will:\n\n- Add to ${WARDEN_CRYPTTAB}:\n  ${crypttab_line}\n"
     [[ -n "${fstab_line:-}" ]] && preview+="\n- Add to ${WARDEN_FSTAB}:\n  ${fstab_line}\n"
+    if [[ "$is_zfs" == "1" ]]; then
+        preview+="\n- Enable a boot-time unit to import/mount the ${mapper} zpool once this device unlocks (no /etc/fstab entry -- ZFS doesn't use one)\n"
+    fi
     preview+="\n- Bind Clevis to ${dev} using:\n${trust_summary}\n- Test-unlock and clean up the test mapping"
     if [[ "$needs_tailscale_dropin" == "1" ]]; then
         preview+="\n- Add a systemd ordering drop-in so this device's unlock waits for Tailscale (one of the trusted addresses is a Tailscale address)"
@@ -247,6 +253,7 @@ complete_enrolment() {
     append_line_if_missing "$WARDEN_CRYPTTAB" "$crypttab_line"
     [[ -n "${fstab_line:-}" ]] && append_line_if_missing "$WARDEN_FSTAB" "$fstab_line"
     ensure_systemd_unit_enabled "remote-cryptsetup.target"
+    [[ "$is_zfs" == "1" ]] && enable_zfs_import_unit "$mapper"
     [[ "$needs_tailscale_dropin" == "1" ]] && ensure_tailscale_ordering_dropin "$mapper"
 
     if ! run_clevis_luks_bind "$dev" "$passphrase" "$pin_type" "$pin_config" >/dev/null; then
@@ -257,7 +264,13 @@ complete_enrolment() {
     local unlock_result
     unlock_result="$(test_unlock_and_cleanup "$dev")"
     if [[ "$unlock_result" == "ok" ]]; then
-        local msg="${dev} is bound and crypttab/fstab are updated. The test-unlock succeeded, so this should unlock automatically at boot once the late-boot unlocker (menu 6) is enabled."
+        local msg="${dev} is bound and crypttab is updated"
+        if [[ "$is_zfs" == "1" ]]; then
+            msg+=" (zpool ${mapper} already imported and mounted at ${mountpoint} from setup; the new boot-time unit takes over on future reboots)"
+        else
+            msg+="/fstab are updated"
+        fi
+        msg+=". The test-unlock succeeded, so this should unlock automatically at boot once the late-boot unlocker (menu 6) is enabled."
         [[ "$needs_tailscale_dropin" == "1" ]] && msg+="\n\nA systemd ordering drop-in was also added so unlock waits for Tailscale to be up, not just basic networking."
         warden_msg "Enrolment complete" "$msg"
     else

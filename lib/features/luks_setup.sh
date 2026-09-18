@@ -146,6 +146,16 @@ feature_luks_setup_menu() {
         passphrase="$(whiptail --passwordbox "Enter a strong recovery passphrase:" 12 70 3>&1 1>&2 2>&3)" || return 0
     fi
 
+    local fs_kind
+    fs_kind="$(warden_menu "Filesystem" "What should this device hold?" \
+        filesystem "A plain filesystem (ext4 by default; you can type any mkfs.<type> at the next prompt)" \
+        zfs "A single-disk ZFS pool (auto-imports/mounts after unlock; no /etc/fstab entry)")" || return 0
+
+    if [[ "$fs_kind" == "zfs" ]]; then
+        luks_setup_zfs_flow "$dev" "$passphrase" "$pin_type" "$pin_config"
+        return 0
+    fi
+
     local fstype
     fstype="$(whiptail --inputbox "Filesystem to create:" 10 60 "ext4" 3>&1 1>&2 2>&3)" || return 0
 
@@ -186,4 +196,70 @@ feature_luks_setup_menu() {
     mountpoint="$(whiptail --inputbox "Mountpoint for /dev/mapper/${mapper} (or 'none' to skip adding an fstab entry):" 10 70 3>&1 1>&2 2>&3)" || return 0
 
     complete_enrolment "$dev" "$uuid" "$mapper" "$mountpoint" "$fstype" "$passphrase" "$pin_type" "$pin_config"
+}
+
+# luks_setup_zfs_flow <dev> <passphrase> <pin_type> <pin_config>
+#
+# Split out from feature_luks_setup_menu because the ZFS path asks for
+# the mapper name earlier than the plain-filesystem path does: a
+# zpool's name is fixed at creation, this design reuses the mapper
+# name as the pool name (one prompt, not two -- see zfs_pool.sh), and
+# create_zfs_pool needs that name to open the device under before the
+# pool can exist at all. The plain-filesystem path can't reuse this
+# ordering: it deliberately opens under a throwaway name, formats, and
+# closes again, asking for the real mapper name only once the format
+# has already succeeded.
+luks_setup_zfs_flow() {
+    local dev="$1" passphrase="$2" pin_type="$3" pin_config="$4"
+
+    if ! is_pkg_installed zfsutils-linux; then
+        warden_msg "zfsutils-linux not installed" "Install it from menu 1 first."
+        return 0
+    fi
+
+    local existing_names
+    existing_names="$(crypttab_mapper_names | tr '\n' ' ')"
+    local mapper
+    mapper="$(whiptail --inputbox "Mapper AND zpool name for this device (letters, numbers, -, _ only -- the pool reuses the mapper name).\n\nExisting names on this system: ${existing_names:-none}" 12 70 3>&1 1>&2 2>&3)" || return 0
+    if ! is_valid_mapper_name "$mapper"; then
+        warden_msg "Invalid name" "'${mapper}' is either not a valid name (letters, numbers, -, _ only) or is already in use."
+        return 0
+    fi
+    if ! is_valid_zpool_name "$mapper"; then
+        warden_msg "Invalid zpool name" "'${mapper}' is a valid mapper name but not a valid zpool name (zpool reserves names like mirror/raidz/log/cache/spare, and disallows a leading digit). Choose a different name."
+        return 0
+    fi
+
+    local mountpoint
+    mountpoint="$(whiptail --inputbox "Mountpoint for the ZFS dataset (ZFS pools need an actual path here, not 'none'):" 10 70 "/mnt/${mapper}" 3>&1 1>&2 2>&3)" || return 0
+    if [[ -z "$mountpoint" || "$mountpoint" == "none" ]]; then
+        warden_msg "Mountpoint required" "ZFS pools need an actual mountpoint in this wizard, not 'none'."
+        return 0
+    fi
+
+    if warden_yesno "Preview" "This will:\n\n- cryptsetup luksFormat ${dev}\n- Open it as /dev/mapper/${mapper}\n- zpool create -m ${mountpoint} ${mapper} /dev/mapper/${mapper}\n- Then continue into enrolment (crypttab, Clevis bind, boot-time import unit)\n\nShow this as a dry-run first (no changes made)?"; then
+        local saved_dry_run="${WARDEN_DRY_RUN}"
+        WARDEN_DRY_RUN=1
+        format_luks_device "$dev" "$passphrase"
+        create_zfs_pool "$dev" "$passphrase" "$mapper" "$mountpoint"
+        WARDEN_DRY_RUN="$saved_dry_run"
+        if ! warden_yesno "Proceed?" "Proceed with the real format now? This destroys any existing data on ${dev}."; then
+            return 0
+        fi
+    fi
+
+    if ! format_luks_device "$dev" "$passphrase"; then
+        warden_msg "Format failed" "cryptsetup luksFormat did not succeed. Check the session log at ${WARDEN_LOG_FILE}."
+        return 0
+    fi
+
+    if ! create_zfs_pool "$dev" "$passphrase" "$mapper" "$mountpoint"; then
+        warden_msg "Pool creation failed" "The device is now LUKS-formatted, but creating the ZFS pool did not succeed. Check the session log at ${WARDEN_LOG_FILE}. You can retry pool creation manually (cryptsetup open, then zpool create), or clean up and re-run this wizard."
+        return 0
+    fi
+
+    local uuid
+    uuid="$(uuid_for_device "$dev")"
+
+    complete_enrolment "$dev" "$uuid" "$mapper" "$mountpoint" "zfs" "$passphrase" "$pin_type" "$pin_config"
 }

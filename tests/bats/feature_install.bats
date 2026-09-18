@@ -31,10 +31,21 @@ teardown() { warden_test_teardown; }
     grep -q "clevis-tpm2" "$WARDEN_LOG_FILE"
 }
 
+@test "install_selected only requests zfsutils-linux when explicitly asked" {
+    WARDEN_DRY_RUN=1 install_selected clevis 0 0
+    run grep -q "zfsutils-linux" "$WARDEN_LOG_FILE"
+    [ "$status" -ne 0 ]
+}
+
+@test "install_selected requests zfsutils-linux when asked" {
+    WARDEN_DRY_RUN=1 install_selected clevis 0 1
+    grep -q "zfsutils-linux" "$WARDEN_LOG_FILE"
+}
+
 @test "describe_install_status reports a line for every managed package" {
     local out
     out="$(describe_install_status)"
-    for pkg in tang clevis clevis-luks clevis-systemd clevis-tpm2; do
+    for pkg in tang clevis clevis-luks clevis-systemd clevis-tpm2 zfsutils-linux; do
         echo "$out" | grep -qE "^  ${pkg}: (installed|not installed)$"
     done
 }

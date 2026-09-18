@@ -11,6 +11,7 @@
 WARDEN_TANG_PKGS=(tang)
 WARDEN_CLEVIS_CORE_PKGS=(clevis clevis-luks clevis-systemd)
 WARDEN_CLEVIS_TPM2_PKG=clevis-tpm2
+WARDEN_ZFS_PKG=zfsutils-linux
 
 readonly WARDEN_INSTALL_REMINDER="Tang -- the server component. Runs on a machine and answers key-exchange requests. It doesn't keep a list of clients; anything that can reach it can request an exchange, so it's a network-trust model, not an authentication one.
 
@@ -20,7 +21,7 @@ Clevis -- the client component. Installed on each machine that has an encrypted 
 # this menu manages, one line per package.
 describe_install_status() {
     local pkg
-    for pkg in tang clevis clevis-luks clevis-systemd clevis-tpm2; do
+    for pkg in tang clevis clevis-luks clevis-systemd clevis-tpm2 zfsutils-linux; do
         if is_pkg_installed "$pkg"; then
             printf '  %s: installed\n' "$pkg"
         else
@@ -29,10 +30,10 @@ describe_install_status() {
     done
 }
 
-# install_selected <choice> <install_tpm2:0|1>
+# install_selected <choice> <install_tpm2:0|1> <install_zfs:0|1>
 # choice is one of: tang, clevis, both
 install_selected() {
-    local choice="$1" install_tpm2="${2:-0}"
+    local choice="$1" install_tpm2="${2:-0}" install_zfs="${3:-0}"
 
     ensure_universe_enabled
 
@@ -49,6 +50,9 @@ install_selected() {
         if [[ "$install_tpm2" == "1" ]]; then
             ensure_pkg_installed "$WARDEN_CLEVIS_TPM2_PKG"
         fi
+        if [[ "$install_zfs" == "1" ]]; then
+            ensure_pkg_installed "$WARDEN_ZFS_PKG"
+        fi
     fi
 }
 
@@ -62,10 +66,13 @@ feature_install_menu() {
         clevis "Clevis only (client)" \
         both "Both")" || return 0
 
-    local install_tpm2=0
+    local install_tpm2=0 install_zfs=0
     if [[ "$choice" == "clevis" || "$choice" == "both" ]]; then
         if warden_yesno "Optional: clevis-tpm2" "Install clevis-tpm2 as well?\n\nAdds TPM2 pin support: binds a LUKS volume to this specific machine's TPM chip instead of (or alongside) a Tang server. Note: PCR-sealed bindings can break after firmware/kernel updates and need a re-bind."; then
             install_tpm2=1
+        fi
+        if warden_yesno "Optional: zfsutils-linux" "Install zfsutils-linux as well?\n\nLets menus 4/5 create or enrol a device as a single-disk ZFS pool instead of a plain filesystem, auto-importing/mounting it after unlock (no /etc/fstab entry -- ZFS doesn't use one)."; then
+            install_zfs=1
         fi
     fi
 
@@ -74,13 +81,13 @@ feature_install_menu() {
     if warden_yesno "Preview first?" "Show what would be installed without actually installing (dry-run)?"; then
         local saved_dry_run="${WARDEN_DRY_RUN}"
         WARDEN_DRY_RUN=1
-        install_selected "$choice" "$install_tpm2"
+        install_selected "$choice" "$install_tpm2" "$install_zfs"
         WARDEN_DRY_RUN="$saved_dry_run"
         if ! warden_yesno "Proceed?" "Proceed with the real installation now?"; then
             return 0
         fi
     fi
 
-    install_selected "$choice" "$install_tpm2"
+    install_selected "$choice" "$install_tpm2" "$install_zfs"
     warden_msg "Install complete" "Requested package(s) are installed (or were already present)."
 }
