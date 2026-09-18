@@ -146,23 +146,20 @@ feature_luks_enrol_menu() {
     trust="$(load_trust_config_or_warn)" || return 0
     local pin_type="${trust%%$'\t'*}" pin_config="${trust#*$'\t'}"
 
-    local -a devs=() menu_items=()
+    local -a menu_items=()
     local dev uuid
     while read -r dev uuid; do
         [[ -n "$dev" ]] || continue
-        devs+=("$dev|$uuid")
-        menu_items+=("$dev|$uuid" "UUID ${uuid}")
+        menu_items+=("$dev" "UUID ${uuid}")
     done < <(unmanaged_luks_devices)
 
-    if [[ "${#devs[@]}" -eq 0 ]]; then
+    if [[ "${#menu_items[@]}" -eq 0 ]]; then
         warden_msg "Nothing to enrol" "No unmanaged crypto_LUKS devices were found (every crypto_LUKS device is either already in /etc/crypttab, or excluded because it's this system's root/boot/efi device -- see the wiki for root-drive unlock, which is a separate, not-yet-built feature)."
         return 0
     fi
 
-    local choice
-    choice="$(warden_menu "Select a device to enrol" "Unmanaged crypto_LUKS devices:" "${menu_items[@]}")" || return 0
-    dev="${choice%|*}"
-    uuid="${choice#*|}"
+    dev="$(warden_menu "Select a device to enrol" "Unmanaged crypto_LUKS devices:" "${menu_items[@]}")" || return 0
+    uuid="$(uuid_for_device "$dev")"
 
     if ! guard_not_system_critical "$dev"; then
         # Should be unreachable (unmanaged_luks_devices already filters

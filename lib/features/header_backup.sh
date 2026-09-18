@@ -38,7 +38,7 @@ feature_header_backup_menu() {
     local dev uuid
     while read -r dev uuid; do
         [[ -n "$dev" ]] || continue
-        menu_items+=("$dev|$uuid" "UUID ${uuid}")
+        menu_items+=("$dev" "UUID ${uuid}")
     done < <(luks_devices)
 
     if [[ "${#menu_items[@]}" -eq 0 ]]; then
@@ -46,10 +46,8 @@ feature_header_backup_menu() {
         return 0
     fi
 
-    local choice
-    choice="$(warden_menu "Select a device to back up" "crypto_LUKS devices:" "${menu_items[@]}")" || return 0
-    dev="${choice%|*}"
-    uuid="${choice#*|}"
+    dev="$(warden_menu "Select a device to back up" "crypto_LUKS devices:" "${menu_items[@]}")" || return 0
+    uuid="$(uuid_for_device "$dev")"
 
     local existing
     existing="$(existing_header_backups "$uuid" | tr '\n' ' ')"
