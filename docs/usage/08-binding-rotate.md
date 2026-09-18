@@ -14,7 +14,11 @@ by hand; Warden looks them up and displays them.
 - **Rotate** — the safe pattern for replacing a binding:
   1. Binds the current trust configuration into a fresh slot.
   2. Test-unlocks using that new slot specifically, to prove it
-     actually works.
+     actually works. For a ZFS-backed device (an enabled
+     `warden-zfs-import@<mapper>.service` unit), this uses the same
+     export/close/reopen/reimport dance as menus 4/5's enrolment
+     wizard, since the device is already open under its real mapper
+     name and cryptsetup refuses a second mapping of it.
   3. **Only if that verification succeeds**, offers to remove the old
      slot(s). If verification fails, the old binding is left
      completely untouched and the device can still unlock exactly as

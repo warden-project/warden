@@ -171,3 +171,19 @@ EOF
     PATH="${TEST_TMPDIR}/bin:${PATH}" run run_clevis_luks_unbind "/dev/fake" "99"
     [ "$status" -eq 3 ]
 }
+
+@test "binding_action_rotate uses the ZFS-aware test-unlock for a device with an enabled import unit" {
+    # Not a full interactive test (whiptail-dependent, same as the
+    # menu 4/5 equivalents); confirms the wiring exists for the same
+    # bug class found and fixed in menu 4/5's enrolment wizard: a
+    # ZFS-backed device is already open under its real mapper name
+    # (the pool is imported there), so the generic test-unlock
+    # (test_unlock_and_cleanup) fails outright with "Cannot use device
+    # ... which is in use" -- unrelated to whether the new binding
+    # actually works. Rotating a ZFS-backed device's binding would
+    # have always reported "New binding did not verify" without this.
+    local body
+    body="$(declare -f binding_action_rotate)"
+    [[ "$body" == *'is_systemd_unit_enabled "warden-zfs-import@'* ]]
+    [[ "$body" == *'test_unlock_and_cleanup_zfs'* ]]
+}

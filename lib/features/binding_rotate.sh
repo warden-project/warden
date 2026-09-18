@@ -260,8 +260,22 @@ binding_action_rotate() {
     local new_slot
     new_slot="$(new_slots "$before" "$after" | head -n1)"
 
-    local unlock_result
-    unlock_result="$(test_unlock_and_cleanup "$dev")"
+    # A ZFS-backed device is already open under its real mapper name
+    # (the pool is imported there), unlike a plain-filesystem device --
+    # confirmed on real hardware that cryptsetup refuses a second
+    # mapping of the same underlying device outright ("Cannot use
+    # device ... which is in use"), so the generic test-unlock below
+    # would fail here for reasons unrelated to whether the new binding
+    # actually works. Same fix as menu 4/5's enrolment wizard.
+    local unlock_result mapper
+    mapper="$(crypttab_mapper_for_uuid "$(uuid_for_device "$dev")")"
+    if [[ -n "$mapper" ]] && is_systemd_unit_enabled "warden-zfs-import@${mapper}.service" 2>/dev/null; then
+        local mountpoint
+        mountpoint="$(zfs list -H -o mountpoint "$mapper" 2>/dev/null | head -n1)"
+        unlock_result="$(test_unlock_and_cleanup_zfs "$dev" "$mapper" "$passphrase" "${mountpoint:-unknown}")"
+    else
+        unlock_result="$(test_unlock_and_cleanup "$dev")"
+    fi
     if [[ "$unlock_result" != "ok" ]]; then
         warden_msg "New binding did not verify -- old binding left in place" "The new binding (slot ${new_slot}) was added but failed to test-unlock. The old binding is untouched, so this device can still unlock as before.\n\nInvestigate before retrying (check Tang reachability and the session log at ${WARDEN_LOG_FILE}). You can remove the failed new slot ${new_slot} from menu 8's Remove action if you want to abandon this attempt."
         return 0
