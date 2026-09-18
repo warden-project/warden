@@ -143,4 +143,6 @@ Menu-path usage docs live in `docs/usage/`. The Forgejo wiki covers how
 NBDE works in this setup, troubleshooting/FAQ, and lessons learned.
 Documentation is part of the definition of done for any change, not a
 follow-up. The original design spec this project was built from is
-kept at `docs/original-spec.md` for reference.
+kept at `docs/original-spec.md` for reference. Ideas raised but not
+yet scoped or scheduled (e.g. ZFS pool/dataset support) are tracked in
+`docs/future-work.md` so they don't get lost.
