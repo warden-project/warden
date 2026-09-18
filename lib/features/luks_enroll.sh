@@ -141,6 +141,36 @@ test_unlock_and_cleanup() {
     echo "failed"
 }
 
+# test_unlock_and_cleanup_zfs <dev> <mapper> <passphrase> <mountpoint>
+#
+# Like test_unlock_and_cleanup, but for a ZFS-backed device: by this
+# point create_zfs_pool has already opened <dev> under its final,
+# persistent <mapper> name and left the pool imported/mounted there.
+# Confirmed on real hardware: cryptsetup refuses a second mapping of
+# the same underlying device at once ("Cannot use device ... which is
+# in use (already mapped or mounted)", exit 5) -- so
+# test_unlock_and_cleanup's throwaway-name approach can't run as-is
+# while that mapping is live. Exports the pool and closes the real
+# mapping first, tests unlock via a throwaway name exactly like the
+# generic path, then re-opens the real mapper and re-imports the pool
+# so the operator's session ends in the same state it would have
+# without this test running at all.
+test_unlock_and_cleanup_zfs() {
+    local dev="$1" mapper="$2" passphrase="$3" mountpoint="$4"
+    run_cmd "export zpool ${mapper} to allow test-unlock" -- zpool export "$mapper" >/dev/null
+    run_cmd "close ${mapper} to allow test-unlock" -- cryptsetup close "$mapper" >/dev/null
+
+    local result
+    result="$(test_unlock_and_cleanup "$dev")"
+
+    if [[ "${WARDEN_DRY_RUN}" != "1" ]]; then
+        printf '%s' "$passphrase" | cryptsetup open --batch-mode "$dev" "$mapper" - >>"$WARDEN_LOG_FILE" 2>&1
+        run_cmd "re-import zpool ${mapper} at ${mountpoint} after test-unlock" -- zpool import -d /dev/mapper "$mapper" >/dev/null
+    fi
+
+    printf '%s' "$result"
+}
+
 feature_luks_enrol_menu() {
     local trust
     trust="$(load_trust_config_or_warn)" || return 0
@@ -262,7 +292,11 @@ complete_enrolment() {
     fi
 
     local unlock_result
-    unlock_result="$(test_unlock_and_cleanup "$dev")"
+    if [[ "$is_zfs" == "1" ]]; then
+        unlock_result="$(test_unlock_and_cleanup_zfs "$dev" "$mapper" "$passphrase" "$mountpoint")"
+    else
+        unlock_result="$(test_unlock_and_cleanup "$dev")"
+    fi
     if [[ "$unlock_result" == "ok" ]]; then
         local msg="${dev} is bound and crypttab is updated"
         if [[ "$is_zfs" == "1" ]]; then

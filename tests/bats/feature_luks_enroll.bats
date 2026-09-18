@@ -153,6 +153,47 @@ EOF
     [ "${lines[-1]}" = "failed" ]
 }
 
+@test "test_unlock_and_cleanup_zfs exports and closes the real mapping before testing, then re-establishes it" {
+    # Regression test for a real failure found on real hardware:
+    # create_zfs_pool leaves the device open under its final mapper
+    # name (pool imported/mounted), and cryptsetup refuses a second
+    # mapping of the same underlying device at once ("Cannot use
+    # device ... which is in use", exit 5) -- so the generic
+    # test_unlock_and_cleanup's throwaway-name approach failed outright
+    # every time for a ZFS-backed device. This checks the actual
+    # sequence of calls this wrapper makes to work around that: export
+    # + close first, then the normal test-unlock, then reopen + reimport
+    # so the operator's session ends in the same state it started in.
+    mkdir -p "${TEST_TMPDIR}/bin"
+    local call_log="${TEST_TMPDIR}/calls.log"
+    for tool in zpool cryptsetup clevis; do
+        cat > "${TEST_TMPDIR}/bin/${tool}" <<EOF
+#!/usr/bin/env bash
+echo "${tool} \$*" >> "${call_log}"
+exit 0
+EOF
+        chmod +x "${TEST_TMPDIR}/bin/${tool}"
+    done
+    PATH="${TEST_TMPDIR}/bin:${PATH}" test_unlock_and_cleanup_zfs "/dev/fake" "tank1" "testpass" "/mnt/tank1"
+    grep -qF "zpool export tank1" "$call_log"
+    grep -qF "cryptsetup close tank1" "$call_log"
+    grep -qF "clevis luks unlock -d /dev/fake -n warden-test-$$" "$call_log"
+    grep -qF "cryptsetup open --batch-mode /dev/fake tank1 -" "$call_log"
+    grep -qF "zpool import -d /dev/mapper tank1" "$call_log"
+    # Export/close must happen strictly before the test-unlock attempt,
+    # and reopen/reimport strictly after -- not just present somewhere.
+    local export_line close_line unlock_line reopen_line reimport_line
+    export_line="$(grep -n "zpool export" "$call_log" | cut -d: -f1)"
+    close_line="$(grep -n "cryptsetup close" "$call_log" | cut -d: -f1)"
+    unlock_line="$(grep -n "clevis luks unlock" "$call_log" | cut -d: -f1)"
+    reopen_line="$(grep -n "cryptsetup open" "$call_log" | cut -d: -f1)"
+    reimport_line="$(grep -n "zpool import" "$call_log" | cut -d: -f1)"
+    [ "$export_line" -lt "$unlock_line" ]
+    [ "$close_line" -lt "$unlock_line" ]
+    [ "$unlock_line" -lt "$reopen_line" ]
+    [ "$unlock_line" -lt "$reimport_line" ]
+}
+
 @test "trust_config_has_tailscale is true when any address is flagged" {
     trust_config_has_tailscale '{"addresses":[{"url":"http://a","is_tailscale":false},{"url":"http://b","is_tailscale":true}]}'
 }
