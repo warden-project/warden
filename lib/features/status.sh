@@ -70,7 +70,11 @@ render_status_report() {
         echo "UUID:     $uuid"
         if [[ -n "$mapper" ]]; then
             echo "Mapper:   $mapper (in /etc/crypttab)"
-            if fstab_has_mapper "$mapper"; then
+            local zfs_unit="warden-zfs-import@${mapper}.service"
+            if is_systemd_unit_enabled "$zfs_unit" 2>/dev/null; then
+                echo "ZFS:      ${zfs_unit} enabled, state: $(unit_state "$zfs_unit")"
+                describe_zfs_pool_status "$mapper" | sed 's/^/          /'
+            elif fstab_has_mapper "$mapper"; then
                 echo "fstab:    entry present"
             else
                 echo "fstab:    NO entry for /dev/mapper/${mapper}"

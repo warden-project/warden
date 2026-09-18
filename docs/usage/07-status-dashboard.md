@@ -4,8 +4,12 @@ Read-only. Never changes anything on the system. For every
 `crypto_LUKS` device currently visible to the kernel, shows:
 
 - Device path, LUKS UUID
-- Whether it has a `/etc/crypttab` entry (mapper name) and whether the
-  matching `/etc/fstab` entry exists
+- Whether it has a `/etc/crypttab` entry (mapper name), and either:
+  whether the matching `/etc/fstab` entry exists, or — if it has a
+  `warden-zfs-import@<mapper>.service` unit instead (a ZFS-backed
+  device created via menu 4) — that unit's enabled/active state plus
+  `zpool status`/`zfs list` output for the pool (or "pool not
+  currently imported" if it isn't right now)
 - Whether it's currently unlocked (mapper active)
 - Current Clevis binding(s) (`clevis luks list`), if any and if Clevis
   is installed

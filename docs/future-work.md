@@ -24,13 +24,14 @@ device = one zpool, matching the existing 1:1 device model exactly —
 no mirror/raidz, no multi-device pickers). Fits into menus 4/5 as a
 filesystem-type choice alongside ext4/etc., not a separate menu.
 
-**Status: menu 1 (install), menu 4 (new device), menu 11 (Danger Zone
-erase completion message), and menu 12 (uninstall "forget" action) are
-done.** Menu 1/4 are validated end-to-end through the real TUI on real
-hardware, including a full reboot proving auto-unlock → auto-import →
-auto-mount with no manual intervention. Menu 5 (enrol an *existing*
-ZFS-backed device) and menu 7 (status dashboard) are not started —
-see "Remaining scope" below.
+**Status: menu 1 (install), menu 4 (new device), menu 7 (status
+dashboard), menu 11 (Danger Zone erase completion message), and menu
+12 (uninstall "forget" action) are done.** Menu 1/4 are validated
+end-to-end through the real TUI on real hardware, including a full
+reboot proving auto-unlock → auto-import → auto-mount with no manual
+intervention; menu 11/12 are validated via real create-then-forget and
+re-import testing. Menu 5 (enrol an *existing* ZFS-backed device) is
+the only piece not started — see "Remaining scope" below.
 
 **Architecture below is validated against real hardware** (Ubuntu
 24.04 VM, real reboots, not just read from docs) — see the wiki's
@@ -175,6 +176,17 @@ Not yet validated against a real reboot/real hardware the way menu
 1/4 were (a synthetic-content confirmation on the dev VM would be
 straightforward to add later, but hasn't been done).
 
+### Done: menu 7
+
+`render_status_report` now checks each managed device for an enabled
+`warden-zfs-import@<mapper>.service` before falling back to the usual
+fstab check: if present, shows that unit's enabled/active state plus
+`describe_zfs_pool_status` (`zpool status`/`zfs list`, or "pool not
+currently imported" if it isn't right now) instead of an fstab line
+that would never apply to a ZFS-backed device anyway. Covered by bats
+tests with stubbed dependencies; not yet re-confirmed visually against
+the real dashboard on the test VM the way menu 1/4/11/12 were.
+
 ### Remaining scope, not yet validated against real hardware
 
 - Menu 5 (enrol an existing device) needs to detect "this LUKS device
@@ -183,11 +195,5 @@ straightforward to add later, but hasn't been done).
   "blank," and offer to re-enable the `warden-zfs-import@` unit for a
   device that already has a pool on it (e.g. re-enrolling after
   `uninstall`'s "forget" action, or moving a drive between hosts).
-- Menu 7 (status dashboard) needs a ZFS-aware branch: `zpool status
-  <pool>` (health) and `zfs list -o name,mounted,mountpoint <pool>`
-  (dataset mount state) instead of the current crypttab/fstab-based
-  checks.
 
-Revisit menu 5/7 as their own follow-up pass — the boot-ordering
-design and menu 1/4/11/12 are done, but this remaining integration
-work hasn't been started or tested yet.
+Revisit menu 5 as its own follow-up pass — everything else is done.

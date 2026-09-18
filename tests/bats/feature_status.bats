@@ -102,3 +102,43 @@ EOF
     [[ "$output" == *"SURVIVED"* ]]
 }
 
+@test "render_status_report shows ZFS pool status instead of an fstab line for a device with an enabled import unit" {
+    luks_devices() { printf '/dev/fake1 uuid1\n'; }
+    export -f luks_devices
+    crypttab_mapper_for_uuid() { printf 'tank1'; }
+    export -f crypttab_mapper_for_uuid
+    is_systemd_unit_enabled() { [ "$1" = "warden-zfs-import@tank1.service" ]; }
+    export -f is_systemd_unit_enabled
+    unit_state() { echo "active"; }
+    export -f unit_state
+    describe_zfs_pool_status() { printf 'pool: tank1\nstate: ONLINE\n'; }
+    export -f describe_zfs_pool_status
+    clevis_pins_for_device() { :; }
+    export -f clevis_pins_for_device
+
+    local out
+    out="$(render_status_report)"
+    [[ "$out" == *"ZFS:      warden-zfs-import@tank1.service enabled, state: active"* ]]
+    [[ "$out" == *"pool: tank1"* ]]
+    [[ "$out" == *"state: ONLINE"* ]]
+    [[ "$out" != *"fstab:"* ]]
+}
+
+@test "render_status_report shows the normal fstab line for a device with no ZFS import unit" {
+    luks_devices() { printf '/dev/fake1 uuid1\n'; }
+    export -f luks_devices
+    crypttab_mapper_for_uuid() { printf 'disk1'; }
+    export -f crypttab_mapper_for_uuid
+    is_systemd_unit_enabled() { return 1; }
+    export -f is_systemd_unit_enabled
+    fstab_has_mapper() { return 1; }
+    export -f fstab_has_mapper
+    clevis_pins_for_device() { :; }
+    export -f clevis_pins_for_device
+
+    local out
+    out="$(render_status_report)"
+    [[ "$out" == *"fstab:    NO entry for /dev/mapper/disk1"* ]]
+    [[ "$out" != *"ZFS:"* ]]
+}
+
