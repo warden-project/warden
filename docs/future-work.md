@@ -24,14 +24,19 @@ device = one zpool, matching the existing 1:1 device model exactly —
 no mirror/raidz, no multi-device pickers). Fits into menus 4/5 as a
 filesystem-type choice alongside ext4/etc., not a separate menu.
 
-**Status: menu 1 (install), menu 4 (new device), menu 7 (status
+**Status: all six planned pieces are done** — menu 1 (install), menu 4
+(new device), menu 5 (enrol an existing device), menu 7 (status
 dashboard), menu 11 (Danger Zone erase completion message), and menu
-12 (uninstall "forget" action) are done.** Menu 1/4 are validated
-end-to-end through the real TUI on real hardware, including a full
-reboot proving auto-unlock → auto-import → auto-mount with no manual
-intervention; menu 11/12 are validated via real create-then-forget and
-re-import testing. Menu 5 (enrol an *existing* ZFS-backed device) is
-the only piece not started — see "Remaining scope" below.
+12 (uninstall "forget" action). Every piece has been validated
+end-to-end through the real TUI on real hardware: menu 1/4/5 with full
+reboots proving auto-unlock → auto-import → auto-mount with no manual
+intervention (menu 5's case additionally proved a pool created under
+one mapper name gets correctly re-discovered and re-enrolled under its
+own real name after being "forgotten"/moved), and menu 11/12 via real
+create-then-forget-then-re-import testing. This feature is complete
+for the single-disk-pool scope decided above; multi-disk pools
+(mirror/raidz) remain a distinct, larger, not-yet-scoped feature if
+ever wanted.
 
 **Architecture below is validated against real hardware** (Ubuntu
 24.04 VM, real reboots, not just read from docs) — see the wiki's
@@ -192,13 +197,29 @@ template-instantiated unit names, and `zfs list`'s tab-separated
 output rendered as visually cramped/misaligned in whiptail's textbox.
 Both fixed.
 
-### Remaining scope, not yet validated against real hardware
+### Done: menu 5
 
-- Menu 5 (enrol an existing device) needs to detect "this LUKS device
-  is already a ZFS pool member" (e.g. via `blkid` reporting
-  `zfs_member`) as a distinct case from "already has a filesystem" or
-  "blank," and offer to re-enable the `warden-zfs-import@` unit for a
-  device that already has a pool on it (e.g. re-enrolling after
-  `uninstall`'s "forget" action, or moving a drive between hosts).
+`feature_luks_enrol_menu` now asks for the passphrase before anything
+else, opens the device under a throwaway probe name, and checks
+`is_zfs_pool_member` (gated on `zfsutils-linux` being installed, same
+as menu 4) to decide which enrolment path to take — a closed LUKS
+device gives no other way to see what's inside it.
 
-Revisit menu 5 as its own follow-up pass — everything else is done.
+An existing pool's name isn't a free choice the way it is in menu 4
+(where a brand-new pool reuses whatever mapper name was just chosen):
+it's already fixed, possibly under a different mapper name or even a
+different host, and `warden-zfs-import@.service`'s template assumes
+mapper name == pool name. `luks_enrol_zfs_flow` discovers the real
+name (`discover_unimported_zfs_pool_name`, factored into `zfs_pool.sh`
+specifically so it's unit-testable without whiptail) and requires the
+mapper name to match it, refusing cleanly if that name collides with
+another crypttab entry or isn't valid as one.
+
+Confirmed via a real reboot: created a pool under one mapper name,
+exported and closed it, wiped crypttab, then used menu 5's real TUI to
+detect and re-enrol it under its own name (different from the
+original) — auto-unlock → auto-import → auto-mount all worked with no
+manual intervention on the following boot, marker file intact.
+
+ZFS pool support is now complete for the single-disk-pool scope
+decided above.

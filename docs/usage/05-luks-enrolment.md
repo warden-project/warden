@@ -11,24 +11,44 @@ saved trust configuration (menu 3) first.
    `/boot/efi` are excluded from the list entirely, not just warned
    about. Root-drive unlock is a separate, deferred feature (see the
    wiki) and must never be reachable from this general wizard.
-3. Asks for a mapper name (showing existing names on the system for
-   context), a mountpoint (or `none` to skip the fstab entry), and — if
-   a mountpoint was given — the filesystem type.
-4. Asks for the device's **existing** LUKS passphrase, needed to
-   authorise adding the new Clevis binding. This is written to a
-   mode-600 temporary file, passed to `clevis luks bind -k`, and
-   shredded immediately after — never passed as a command-line
-   argument or logged.
-5. Shows a preview of the exact crypttab/fstab lines and a summary of
+3. Asks for the device's **existing** LUKS passphrase first — a closed
+   LUKS device gives no visibility into what's actually inside it,
+   which the next step depends on. This is written to a mode-600
+   temporary file, passed to `clevis luks bind -k`, and shredded
+   immediately after — never passed as a command-line argument or
+   logged.
+4. If `zfsutils-linux` is installed (menu 1, optional), opens the
+   device under a throwaway probe name to check whether it's already a
+   ZFS pool member:
+   - **If it is:** discovers the pool's real name (which may differ
+     from whatever mapper name it was originally created under, or
+     even come from a different host), refuses cleanly if that name
+     can't also be used as the crypttab mapper name (letters, numbers,
+     `-`, `_` only, and not already in use — this design reuses one
+     name for both), then reopens the device under that name, imports
+     the pool, and continues using its actual current mountpoint — no
+     mountpoint/fstype prompts, and no `/etc/fstab` entry (ZFS doesn't
+     use one). Enables a `warden-zfs-import@<mapper>.service` unit
+     (see menu 4) so it auto-imports/mounts at boot from here on.
+   - **If it isn't** (or `zfsutils-linux` isn't installed): continues
+     with the plain-filesystem flow below exactly as before.
+5. (Plain filesystem only) Asks for a mapper name (showing existing
+   names on the system for context), a mountpoint (or `none` to skip
+   the fstab entry), and — if a mountpoint was given — the filesystem
+   type.
+6. Shows a preview of the exact crypttab/fstab lines and a summary of
    the trust configuration it's about to bind against (pin type,
    threshold, every address) — not just that a config exists, but
    what's actually in it — with the usual dry-run option.
-6. Backs up crypttab/fstab before appending (never regenerated
+7. Backs up crypttab/fstab before appending (never regenerated
    wholesale), binds Clevis using the saved trust configuration, then
    immediately does a test-unlock into a throwaway mapper name and
    cleans it up — so you find out now whether it actually works,
-   rather than at the next reboot.
-7. If any address in the trust configuration is Tailscale-flagged,
+   rather than at the next reboot. For a ZFS-backed device, this
+   involves a brief export/close/reopen/reimport dance instead of a
+   simple second mapping, since the device is already open under its
+   real name by this point (see the wiki's Lessons Learned page).
+8. If any address in the trust configuration is Tailscale-flagged,
    also adds a `systemd-cryptsetup@<mapper>.service.d` drop-in ordering
    this device's unlock after `tailscale-online.target` — idempotent,
    backed up before any change, using the properly systemd-escaped

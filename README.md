@@ -44,10 +44,17 @@ including a root/boot/EFI guard gap that missed a whole-disk device
 and a Danger Zone erase leaving a boot-hang hazard behind. See the
 wiki's Lessons Learned page for the full list.
 
+Menus 1, 4, and 5 also support single-disk ZFS pools as an alternative
+to a plain filesystem — creating a new one, or detecting and
+re-enrolling an existing one — with menu 7 (status) and menus 11/12
+(erase/uninstall) aware of the boot-time import unit this needs. Real
+reboot-tested throughout; see `docs/future-work.md` for the design
+(including two systemd ordering-cycle dead ends found along the way)
+and the wiki for the incidents it surfaced.
+
 Root-drive unlock (`clevis-initramfs`) remains deliberately deferred,
-to be revisited separately, as is ZFS pool/dataset support (tracked in
-`docs/future-work.md`). See the wiki for lessons learned and design
-rationale.
+to be revisited separately. See the wiki for lessons learned and
+design rationale.
 
 ## Prerequisites
 
