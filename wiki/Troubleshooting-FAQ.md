@@ -122,11 +122,23 @@ underlying issue, and try again.
 
 Warden looks for upstream Tang's bundled `tangd-rotate-keys` script at
 a couple of conventional paths (`/usr/libexec/`, `/usr/lib/tangd/`)
-and falls back to a `PATH` lookup — this hasn't been verified against
-a real Ubuntu `tang` package install yet. If your install has it
-somewhere else, set `WARDEN_TANGD_ROTATE_KEYS_CANDIDATES` (space
-separated paths) rather than Warden guessing at reimplementing key
-rotation by hand.
+and falls back to a `PATH` lookup. Confirmed on real hardware
+(Ubuntu 24.04): this script *is* shipped, but by the `tang-common`
+package (a dependency of `tang`), not by `tang` itself — checking
+`dpkg -L tang` alone won't show it. If your install genuinely doesn't
+have it anywhere, set `WARDEN_TANGD_ROTATE_KEYS_CANDIDATES` (space
+separated paths); if it's missing everywhere, Warden falls back to
+reimplementing the same manual procedure from `man tang`'s KEY
+ROTATION section directly (see [[Lessons Learned]]), rather than
+refusing outright.
+
+## Menu 10 rotated keys in the wrong directory
+
+Confirmed on real hardware: Ubuntu's `tangd@.service` actually uses
+`/var/lib/tang` as its key database directory, not `/var/db/tang` —
+the path upstream's own documentation examples use. Warden's default
+now matches the real path; override with `WARDEN_TANG_DB_DIR` if a
+given host differs.
 
 ## Why is the Danger Zone's erase confirmation still just an 8-character fragment, not the full UUID?
 
