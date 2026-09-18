@@ -90,7 +90,8 @@ uninstall_action_unbind_device() {
 }
 
 # uninstall_action_forget_device — remove a device's crypttab (and
-# fstab, if present) entry entirely.
+# fstab, if present) entry entirely, plus its ZFS boot-time import unit
+# if it has one.
 #
 # Found missing during real-hardware testing of the Danger Zone erase
 # (menu 11): after an erase, every keyslot is gone, so the device can
@@ -100,7 +101,10 @@ uninstall_action_unbind_device() {
 # that has no possible correct answer anymore. "unbind" above doesn't
 # help here: it reverts to manual passphrase unlock, which assumes a
 # working passphrase keyslot still exists. This only touches
-# crypttab/fstab -- never the LUKS header, keyslots, or Clevis bindings.
+# crypttab/fstab and the ZFS import unit -- never the LUKS header,
+# keyslots, or Clevis bindings, and never zpool/zfs destroy (export
+# only, so the pool's data is untouched and could still be re-imported
+# manually later if needed).
 uninstall_action_forget_device() {
     local -a menu_items=()
     local dev uuid mapper
@@ -118,17 +122,33 @@ uninstall_action_forget_device() {
     uuid="$(uuid_for_device "$dev")"
     mapper="$(crypttab_mapper_for_uuid "$uuid")"
 
-    local bindings
+    local bindings has_zfs_unit=0
     bindings="$(clevis_pins_for_device "$dev")"
+    is_systemd_unit_enabled "warden-zfs-import@${mapper}.service" 2>/dev/null && has_zfs_unit=1
 
-    if ! warden_yesno "Remove crypttab/fstab entries for ${dev}" "Mapper: ${mapper}\nUUID: ${uuid}\nClevis bindings: ${bindings:-none}\n\nThis removes ${mapper}'s entry from ${WARDEN_CRYPTTAB} (and ${WARDEN_FSTAB}, if present), so systemd stops trying to unlock/mount it at boot.\n\nUse this once a device is done being managed by Warden -- most importantly after a Danger Zone erase (menu 11), since a device with no key slots left can never unlock again, and an entry left behind for it can hang the next boot.\n\nThis does NOT touch the LUKS header, keyslots, or any Clevis binding on the device itself -- only the crypttab/fstab entries.\n\nProceed?"; then
+    local msg="Mapper: ${mapper}\nUUID: ${uuid}\nClevis bindings: ${bindings:-none}\n\nThis removes ${mapper}'s entry from ${WARDEN_CRYPTTAB} (and ${WARDEN_FSTAB}, if present), so systemd stops trying to unlock/mount it at boot."
+    if [[ "$has_zfs_unit" == "1" ]]; then
+        msg+="\n\nThis device also has a boot-time ZFS import unit (warden-zfs-import@${mapper}.service) enabled. It will be disabled, and the zpool exported if currently imported -- the pool and its data are left intact and could still be re-imported manually later."
+    fi
+    msg+="\n\nUse this once a device is done being managed by Warden -- most importantly after a Danger Zone erase (menu 11), since a device with no key slots left can never unlock again, and an entry left behind for it can hang the next boot.\n\nThis does NOT touch the LUKS header, keyslots, or any Clevis binding on the device itself.\n\nProceed?"
+
+    if ! warden_yesno "Remove crypttab/fstab entries for ${dev}" "$msg"; then
         return 0
     fi
 
     remove_lines_matching "$WARDEN_CRYPTTAB" "^${mapper}[[:space:]]"
     remove_lines_matching "$WARDEN_FSTAB" "/dev/mapper/${mapper}([[:space:]]|\$)"
 
-    warden_msg "Done" "${mapper}'s crypttab/fstab entries have been removed (backed up first)."
+    local done_msg="${mapper}'s crypttab/fstab entries have been removed (backed up first)."
+    if [[ "$has_zfs_unit" == "1" ]]; then
+        if zpool list "$mapper" >/dev/null 2>&1; then
+            run_cmd "export zpool ${mapper}" -- zpool export "$mapper" >/dev/null
+        fi
+        disable_zfs_import_unit "$mapper"
+        done_msg+="\n\nThe ${mapper} ZFS import unit was disabled, and the pool exported if it was imported."
+    fi
+
+    warden_msg "Done" "$done_msg"
 }
 
 uninstall_action_remove_dropins() {

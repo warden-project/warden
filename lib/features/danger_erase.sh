@@ -106,6 +106,9 @@ feature_danger_erase_menu() {
     mapper="$(crypttab_mapper_for_uuid "$uuid")"
     if [[ -n "$mapper" ]]; then
         completion+="\n\nThis device still has a /etc/crypttab entry (mapper: ${mapper}). With no key slot left, it can never unlock again -- leaving that entry in place risks hanging the next boot waiting for it. Use menu 12 (Uninstall / revert) to remove its crypttab/fstab entries once you're done with this device."
+        if is_systemd_unit_enabled "warden-zfs-import@${mapper}.service" 2>/dev/null; then
+            completion+=" That same menu 12 action also disables the boot-time ZFS import unit this device still has enabled (warden-zfs-import@${mapper}.service)."
+        fi
     fi
 
     danger_msg "$completion"

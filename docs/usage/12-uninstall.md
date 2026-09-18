@@ -27,7 +27,11 @@ the top of `lib/features/uninstall.sh`.
   hanging the next boot waiting on it. "Unbind Clevis from a device"
   above doesn't help in that case, since it reverts to manual
   passphrase unlock — which assumes a working passphrase keyslot still
-  exists.
+  exists. If the device has a `warden-zfs-import@<mapper>.service`
+  unit enabled (menu 4's ZFS path), this also exports the zpool (if
+  currently imported) and disables that unit — the pool and its data
+  are left completely intact and can still be re-imported manually
+  later if needed; only the automatic boot-time behaviour is removed.
 - **Remove Warden-added systemd drop-ins** — lists existing Tailscale
   ordering drop-ins, backs up and removes the chosen one. Only removes
   the ordering hint; the device still auto-unlocks, just without

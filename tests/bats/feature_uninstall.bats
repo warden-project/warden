@@ -82,3 +82,16 @@ EOF
     # that could drift and skip the safety check.
     declare -f run_clevis_luks_unbind | grep -q "slot_has_clevis_token"
 }
+
+@test "uninstall_action_forget_device checks for and disables a ZFS import unit" {
+    # Not a full interactive test (whiptail-dependent, same as above);
+    # confirms the wiring exists for the gap found via real-hardware
+    # testing: "forget" only ever removed crypttab/fstab entries, which
+    # would leave a ZFS-backed device's warden-zfs-import@ unit enabled
+    # and pointing at a device Warden no longer tracks.
+    local body
+    body="$(declare -f uninstall_action_forget_device)"
+    [[ "$body" == *'is_systemd_unit_enabled "warden-zfs-import@'* ]]
+    [[ "$body" == *'disable_zfs_import_unit'* ]]
+    [[ "$body" == *'zpool export'* ]]
+}

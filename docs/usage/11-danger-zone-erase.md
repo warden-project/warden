@@ -36,7 +36,9 @@ banner so it never looks like a routine screen.
    and points to menu 12's "remove crypttab/fstab entries" action —
    with no key slot left, the device can never unlock again, and its
    crypttab entry has no `nofail` option, so leaving it in place risks
-   hanging the next boot.
+   hanging the next boot. If it also has a `warden-zfs-import@`
+   unit enabled, that's mentioned too, since the same menu 12 action
+   disables it as well.
 
 See the wiki's confirmation-phrase design notes for why `ERASE
 <fragment>` was chosen over either a longer typed phrase or a plain

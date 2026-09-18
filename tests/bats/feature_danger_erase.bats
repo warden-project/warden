@@ -75,3 +75,17 @@ EOF
     PATH="${TEST_TMPDIR}/bin:${PATH}" run run_luks_erase "/dev/fake"
     [ "$status" -ne 0 ]
 }
+
+@test "feature_danger_erase_menu's completion message checks for a ZFS import unit too" {
+    # Not a full interactive test (whiptail-dependent); confirms the
+    # wiring exists for the gap found via real-hardware testing: an
+    # erased device can still have a boot-time ZFS import unit
+    # enabled, and the "still has a crypttab entry" warning should
+    # mention that too, not just the crypttab entry itself. Plain text
+    # reference to menu 12, not a function call from uninstall.sh --
+    # menu 11 and menu 12 must still share zero code path.
+    local body
+    body="$(declare -f feature_danger_erase_menu)"
+    [[ "$body" == *'is_systemd_unit_enabled "warden-zfs-import@'* ]]
+    [[ "$body" != *'uninstall_action'* ]]
+}

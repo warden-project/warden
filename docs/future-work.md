@@ -24,12 +24,13 @@ device = one zpool, matching the existing 1:1 device model exactly —
 no mirror/raidz, no multi-device pickers). Fits into menus 4/5 as a
 filesystem-type choice alongside ext4/etc., not a separate menu.
 
-**Status: menu 1 (install) and menu 4 (new device) are done, and
-validated end-to-end through the real TUI on real hardware, including
-a full reboot proving auto-unlock → auto-import → auto-mount with no
-manual intervention.** Menu 5 (enrol an *existing* ZFS-backed device),
-menu 7 (status dashboard), and menu 12 (uninstall) ZFS-awareness are
-not started — see "Remaining scope" below.
+**Status: menu 1 (install), menu 4 (new device), menu 11 (Danger Zone
+erase completion message), and menu 12 (uninstall "forget" action) are
+done.** Menu 1/4 are validated end-to-end through the real TUI on real
+hardware, including a full reboot proving auto-unlock → auto-import →
+auto-mount with no manual intervention. Menu 5 (enrol an *existing*
+ZFS-backed device) and menu 7 (status dashboard) are not started —
+see "Remaining scope" below.
 
 **Architecture below is validated against real hardware** (Ubuntu
 24.04 VM, real reboots, not just read from docs) — see the wiki's
@@ -156,6 +157,24 @@ mapping first, run the normal throwaway-name test-unlock, then reopen
 the real mapper and re-import the pool so the operator's session ends
 in the same state it would have without the test running at all.
 
+### Done: menus 11 and 12
+
+- Menu 12 (uninstall/revert)'s "forget" action now checks for an
+  enabled `warden-zfs-import@<mapper>.service`, and if present:
+  exports the zpool (only if currently imported) and disables the
+  unit. Never touches the pool's data (export, not destroy) or the
+  LUKS layer at all -- matches this action's existing scope exactly.
+- Menu 11 (Danger Zone erase)'s "still has a crypttab entry" boot-hang
+  warning now also checks for and mentions an enabled
+  `warden-zfs-import@` unit for the erased device, pointing at the
+  same menu 12 action above. Plain text, not a function call -- menu
+  11 and menu 12 still share zero code path (verified via grep, same
+  as before).
+
+Not yet validated against a real reboot/real hardware the way menu
+1/4 were (a synthetic-content confirmation on the dev VM would be
+straightforward to add later, but hasn't been done).
+
 ### Remaining scope, not yet validated against real hardware
 
 - Menu 5 (enrol an existing device) needs to detect "this LUKS device
@@ -168,16 +187,7 @@ in the same state it would have without the test running at all.
   <pool>` (health) and `zfs list -o name,mounted,mountpoint <pool>`
   (dataset mount state) instead of the current crypttab/fstab-based
   checks.
-- Menu 12 (uninstall/revert)'s "forget" action (crypttab/fstab-only
-  today) needs a ZFS-aware equivalent: `zpool export <pool>` plus
-  `systemctl disable --now warden-zfs-import@<pool>.service` and
-  removing the unit file, since there's no fstab entry for it to
-  clean up.
-- Menu 11 (Danger Zone erase) works on the LUKS layer only and needs
-  no ZFS-specific change, but its "still has a crypttab entry" boot-
-  hang warning (see Lessons Learned) should also check for and mention
-  an enabled `warden-zfs-import@<pool>.service` for the erased device.
 
-Revisit menu 5/7/12 as their own follow-up pass — the boot-ordering
-design and menu 1/4 are done and real-hardware-validated, but this
-remaining integration work hasn't been started or tested yet.
+Revisit menu 5/7 as their own follow-up pass — the boot-ordering
+design and menu 1/4/11/12 are done, but this remaining integration
+work hasn't been started or tested yet.
