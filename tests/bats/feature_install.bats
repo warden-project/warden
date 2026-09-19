@@ -71,6 +71,48 @@ teardown() { warden_test_teardown; }
     [ "$(ubuntu_codename)" = "noble" ]
 }
 
+@test "is_tailscale_connected is false when the tailscale CLI isn't present" {
+    PATH="/nonexistent" run is_tailscale_connected
+    [ "$status" -ne 0 ]
+}
+
+@test "is_tailscale_connected is true when BackendState is Running" {
+    mkdir -p "${TEST_TMPDIR}/bin"
+    cat > "${TEST_TMPDIR}/bin/tailscale" <<'EOF'
+#!/usr/bin/env bash
+echo '{"BackendState":"Running"}'
+EOF
+    chmod +x "${TEST_TMPDIR}/bin/tailscale"
+    PATH="${TEST_TMPDIR}/bin:${PATH}" is_tailscale_connected
+}
+
+@test "is_tailscale_connected is false when BackendState is NeedsLogin (installed but not joined)" {
+    mkdir -p "${TEST_TMPDIR}/bin"
+    cat > "${TEST_TMPDIR}/bin/tailscale" <<'EOF'
+#!/usr/bin/env bash
+echo '{"BackendState":"NeedsLogin"}'
+EOF
+    chmod +x "${TEST_TMPDIR}/bin/tailscale"
+    PATH="${TEST_TMPDIR}/bin:${PATH}" run is_tailscale_connected
+    [ "$status" -ne 0 ]
+}
+
+@test "is_tailscale_connected is false when tailscale is present but the status call itself fails" {
+    # Not called via bare assignment anywhere in this codebase (only
+    # ever as a boolean condition), so this isn't the set -e bug class
+    # covered elsewhere -- just confirms a failing/erroring `tailscale
+    # status` call is treated as "not connected," not an error that
+    # propagates oddly.
+    mkdir -p "${TEST_TMPDIR}/bin"
+    cat > "${TEST_TMPDIR}/bin/tailscale" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+    chmod +x "${TEST_TMPDIR}/bin/tailscale"
+    PATH="${TEST_TMPDIR}/bin:${PATH}" run is_tailscale_connected
+    [ "$status" -ne 0 ]
+}
+
 @test "is_tailscale_repo_configured is false when the apt list file doesn't exist" {
     WARDEN_TAILSCALE_APT_LIST="${TEST_TMPDIR}/does-not-exist.list"
     run is_tailscale_repo_configured
@@ -152,4 +194,22 @@ EOF
     out="$(describe_install_status)"
     if is_pkg_installed tang; then expected="  tang: installed"; else expected="  tang: not installed"; fi
     echo "$out" | grep -qxF "$expected"
+}
+
+@test "feature_install_menu's closing message reminds about 'tailscale up', gated on actually checking connection state" {
+    # Not a full interactive test (whiptail-dependent, same as other
+    # menu-level tests elsewhere in this suite). The pre-install prompt
+    # already mentions 'tailscale up' once, but that's easy to forget
+    # by the time installation actually finishes -- confirms the
+    # closing message carries its own reminder too (distinct wording,
+    # "not yet connected to a tailnet", so this doesn't just match the
+    # earlier pre-install prompt's text), gated on
+    # is_tailscale_connected rather than just "was tailscale
+    # requested," so an already-joined host doesn't get a stale
+    # reminder.
+    local body
+    body="$(declare -f feature_install_menu)"
+    [[ "$body" == *"not yet connected to a tailnet"* ]]
+    [[ "$body" == *"sudo tailscale up"* ]]
+    [[ "$body" == *'"$install_tailscale" == "1" ]] && ! is_tailscale_connected'* ]]
 }

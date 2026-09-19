@@ -29,6 +29,24 @@ ubuntu_codename() {
     printf '%s' "${codename:-noble}"
 }
 
+# is_tailscale_connected — true if Tailscale is installed AND actually
+# logged in/connected right now (BackendState "Running"), not just
+# installed. Used to decide whether the post-install message needs to
+# remind about the still-required 'tailscale up' step -- checking
+# rather than assuming, so an already-joined host doesn't get an
+# unnecessary/wrong reminder.
+is_tailscale_connected() {
+    command -v tailscale >/dev/null 2>&1 || return 1
+    tailscale status --json 2>/dev/null | python3 -c '
+import json, sys
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    sys.exit(1)
+sys.exit(0 if data.get("BackendState") == "Running" else 1)
+'
+}
+
 # is_tailscale_repo_configured — true if Tailscale's own apt source
 # list is already present.
 is_tailscale_repo_configured() {
@@ -152,5 +170,10 @@ feature_install_menu() {
     fi
 
     install_selected "$choice" "$install_tpm2" "$install_zfs" "$install_tailscale"
-    warden_msg "Install complete" "Requested package(s) are installed (or were already present)."
+
+    local complete_msg="Requested package(s) are installed (or were already present)."
+    if [[ "$install_tailscale" == "1" ]] && ! is_tailscale_connected; then
+        complete_msg+="\n\nTailscale is installed but not yet connected to a tailnet. Run 'sudo tailscale up' to log in before relying on any Tailscale-routed Tang address."
+    fi
+    warden_msg "Install complete" "$complete_msg"
 }

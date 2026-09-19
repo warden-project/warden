@@ -23,7 +23,11 @@ what each component does, before asking what to install.
   from `pkgs.tailscale.com`, written to disk — never piped into a
   shell) before installing the package. This only installs the
   package: joining a tailnet (`tailscale up`) is a separate,
-  credential-specific step left to you.
+  credential-specific step left to you. If Tailscale was installed and
+  isn't already connected to a tailnet (checked, not assumed), the
+  closing message repeats this as a concrete next step (`sudo
+  tailscale up`) — easy to miss in the earlier prompt by the time
+  installation actually finishes.
 - Confirms Ubuntu's `universe` archive is enabled first, enabling it if
   not.
 - Every install check is idempotent: already-installed packages are
