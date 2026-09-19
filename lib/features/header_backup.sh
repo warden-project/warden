@@ -4,7 +4,7 @@
 # A header backup contains wrapped key material and is sensitive --
 # Warden reminds of this in the UI itself, not just in docs, and
 # refuses to guess where a safe storage location is (that's the
-# person's call, same as the /var/db/tang reminder in menu 2).
+# person's call, same as the /var/lib/tang reminder in menu 2).
 
 : "${WARDEN_HEADER_BACKUP_DIR:=${WARDEN_BACKUP_DIR:-/var/backups/warden}/luks-headers}"
 

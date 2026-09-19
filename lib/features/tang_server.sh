@@ -177,7 +177,7 @@ feature_tang_server_config() {
     local verify_result
     verify_result="$(verify_tang_local "$port")"
     if [[ "$verify_result" == "ok" ]]; then
-        warden_msg "Tang server configured" "tangd.socket is listening on port ${port} and responded to a local /adv request.\n\nRemember: /var/db/tang/ needs backing up outside this tool. Warden won't do this automatically -- where you back it up to is your call."
+        warden_msg "Tang server configured" "tangd.socket is listening on port ${port} and responded to a local /adv request.\n\nRemember: /var/lib/tang/ needs backing up outside this tool. Warden won't do this automatically -- where you back it up to is your call."
     else
         warden_msg "Configuration applied, but verification failed" "tangd.socket was configured for port ${port}, but a local curl to /adv did not succeed. Check 'systemctl status tangd.socket' and the session log."
     fi

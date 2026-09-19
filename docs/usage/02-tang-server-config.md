@@ -28,9 +28,11 @@ Only available once Tang is installed (menu 1). Configures the local
 - Verifies with a local `curl http://localhost:<port>/adv` and reports
   success or failure clearly — it does not just assume the config
   applied cleanly.
-- Reminds you that `/var/db/tang/` needs backing up outside this tool.
-  Warden won't do this automatically; where you back it up to (so that
-  the encrypted drive's own failure wouldn't also take out the backup)
-  is your call.
+- Reminds you that `/var/lib/tang/` (Ubuntu's real key database
+  directory, confirmed against `tangd@.service`'s own `ExecStart` —
+  not `/var/db/tang`, the path used in upstream's own documentation
+  examples) needs backing up outside this tool. Warden won't do this
+  automatically; where you back it up to (so that the encrypted
+  drive's own failure wouldn't also take out the backup) is your call.
 
 Supports a dry-run preview before committing, like every other wizard.
