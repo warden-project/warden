@@ -36,6 +36,64 @@ teardown() { warden_test_teardown; }
     [ "$status" -ne 0 ]
 }
 
+@test "is_port_in_use is false for a port nothing is listening on" {
+    run is_port_in_use 18732
+    [ "$status" -ne 0 ]
+}
+
+@test "is_port_in_use is true for a port something is actually listening on" {
+    python3 -c "
+import socket, time
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+s.bind(('127.0.0.1', 18733))
+s.listen(1)
+time.sleep(5)
+" &
+    local pid=$!
+    sleep 1
+    is_port_in_use 18733
+    kill "$pid" 2>/dev/null
+    wait "$pid" 2>/dev/null || true
+}
+
+@test "describe_port_listener names the actual listening process" {
+    if [ "$(id -u)" -ne 0 ]; then
+        skip "requires root to see process names via ss -p"
+    fi
+    python3 -c "
+import socket, time
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+s.bind(('127.0.0.1', 18734))
+s.listen(1)
+time.sleep(5)
+" &
+    local pid=$!
+    sleep 1
+    local listener
+    listener="$(describe_port_listener 18734)"
+    kill "$pid" 2>/dev/null
+    wait "$pid" 2>/dev/null || true
+    [[ "$listener" == *"python3"* ]]
+}
+
+@test "describe_port_listener is empty when nothing is listening" {
+    [ -z "$(describe_port_listener 18735)" ]
+}
+
+@test "feature_tang_server_config warns about a port collision with something other than tangd's own listener" {
+    # Found via a real user question, not a real-hardware bug: setting
+    # a new Tang port previously had no check for whether something
+    # else was already using it -- is_valid_port only validates the
+    # number is in range. Not a full interactive test (whiptail-
+    # dependent); confirms the check is wired in.
+    local body
+    body="$(declare -f feature_tang_server_config)"
+    [[ "$body" == *"is_port_in_use"* ]]
+    [[ "$body" == *"Port already in use"* ]]
+}
+
 @test "ensure_tangd_port in dry-run mode does not write the drop-in file" {
     WARDEN_DRY_RUN=1 ensure_tangd_port 7500
     [ ! -f "$(_tangd_dropin_file)" ]

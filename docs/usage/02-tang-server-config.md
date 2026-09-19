@@ -24,6 +24,11 @@ Only available once Tang is installed (menu 1). Configures the local
   port from a drop-in + `daemon-reload` alone; systemd itself flags it
   non-functional until restarted. If it wasn't running yet, it's
   simply started.
+- Checks whether a *new* port (one different from what's currently
+  configured) is already in use by something else on the host before
+  touching anything, naming the actual listening process where
+  possible, and asks for confirmation before proceeding rather than
+  silently attempting a configuration that would very likely fail.
 - If `ufw` is active, offers to allow the chosen port through it.
 - Verifies with a local `curl http://localhost:<port>/adv` and reports
   success or failure clearly — it does not just assume the config

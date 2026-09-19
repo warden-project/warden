@@ -33,6 +33,23 @@ is_valid_port() {
     [[ "$port" =~ ^[0-9]+$ ]] && (( port >= 1 && port <= 65535 ))
 }
 
+# is_port_in_use <port> — true if something is currently listening on
+# <port> over TCP, regardless of what it is.
+is_port_in_use() {
+    local port="$1"
+    ss -tlnH "sport = :${port}" 2>/dev/null | grep -q .
+}
+
+# describe_port_listener <port> — short, space-separated names of
+# whatever process(es) are currently listening on <port>, or empty if
+# none/undeterminable. Requires root to see process names (Warden
+# always runs as root, so this is safe to rely on).
+describe_port_listener() {
+    local port="$1"
+    ss -tlnpH "sport = :${port}" 2>/dev/null | grep -oP 'users:\(\("\K[^"]+' | sort -u | tr '\n' ' '
+    return 0
+}
+
 _tangd_dropin_content() {
     local port="$1"
     printf '[Socket]\nListenStream=\nListenStream=%s\n' "$port"
@@ -140,6 +157,14 @@ feature_tang_server_config() {
     if ! is_valid_port "$port"; then
         warden_msg "Invalid port" "'${port}' isn't a valid port number (1-65535)."
         return 0
+    fi
+
+    if [[ "$port" != "$(configured_tangd_port)" ]] && is_port_in_use "$port"; then
+        local listener
+        listener="$(describe_port_listener "$port")"
+        if ! warden_yesno "Port already in use" "Something is already listening on port ${port} (${listener:-unable to determine what}).\n\nConfiguring tangd for this port will very likely fail outright, or could disrupt whatever is currently using it.\n\nProceed anyway?"; then
+            return 0
+        fi
     fi
 
     if warden_yesno "Preview first?" "Show what would change without actually changing it (dry-run)?"; then
