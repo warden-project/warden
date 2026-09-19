@@ -531,7 +531,7 @@ root_unlock_action_enable() {
     local initramfs_path
     initramfs_path="$(current_initramfs_path)"
 
-    if warden_yesno "Preview" "This will:\n\n1. Back up the current initramfs (${initramfs_path})\n2. Install clevis-initramfs and regenerate the initramfs for kernel $(uname -r)\n3. Bind Clevis to ${root_dev} using the ${pin_type} pin\n4. Test-unlock the new binding\n\nThe existing LUKS passphrase is never touched or removed.\n\nShow this as a dry-run first (no changes made)?"; then
+    if warden_yesno "Preview" "This will:\n\n1. Back up the current initramfs (${initramfs_path})\n2. Install clevis-initramfs and regenerate the initramfs for kernel $(uname -r)\n3. Bind Clevis to ${root_dev} using the ${pin_type} pin\n\nThe existing LUKS passphrase is never touched or removed. Unlike other menus, this cannot be test-unlocked live -- root's device is always in use while Warden runs, so an actual reboot is the only real proof.\n\nShow this as a dry-run first (no changes made)?"; then
         local saved_dry_run="${WARDEN_DRY_RUN}"
         WARDEN_DRY_RUN=1
         create_root_unlock_recovery_kit "$initramfs_path" >/dev/null
@@ -560,13 +560,18 @@ root_unlock_action_enable() {
         return 0
     fi
 
-    local unlock_result
-    unlock_result="$(test_unlock_and_cleanup "$root_dev")"
-
-    if [[ "$unlock_result" == "ok" ]]; then
-        warden_msg "Enable complete" "Root-drive unlock is enabled and the new binding verified successfully.\n\nIMPORTANT: this only proves the Clevis binding itself works -- it does NOT prove the initramfs boot-time path works. Only an actual reboot proves that.\n\nDo not close your only access to this machine until you have rebooted and confirmed it unlocks correctly.\n\nYour recovery kit:\n${WARDEN_ROOT_UNLOCK_BOOT_DIR}/${kit_ts} (guide + script)\n${WARDEN_ROOT_UNLOCK_ROOT_DIR}/${kit_ts} (initramfs backup)\n\nRead the guide there before rebooting."
-    else
-        warden_msg "Bind succeeded, but test-unlock failed" "The Clevis binding was added, but test-unlock did not succeed. Check Tang reachability (if using Tang) and the session log at ${WARDEN_LOG_FILE} before rebooting. Your recovery kit is still at ${WARDEN_ROOT_UNLOCK_BOOT_DIR}/${kit_ts} if needed."
-    fi
+    # Deliberately no test_unlock_and_cleanup here, unlike every other
+    # enrolment path in Warden. Confirmed on real hardware: root's LUKS
+    # device is *always* already open/mounted whenever Warden itself is
+    # running (Warden runs from the booted OS on that very device), so
+    # cryptsetup refuses a second mapping outright ("Cannot use device
+    # ... which is in use") every single time, unlike the ZFS case
+    # (test_unlock_and_cleanup_zfs) where the device is only
+    # *sometimes* already open and an export/close/reopen dance can
+    # work around it. There is no equivalent workaround for root: you
+    # cannot unmount a running system's own root filesystem to test it.
+    # clevis luks bind's own successful exit is the only automated
+    # signal available here -- a real reboot is the only actual proof.
+    warden_msg "Enable complete" "Root-drive unlock is enabled: clevis luks bind succeeded for the ${pin_type} pin on ${root_dev}.\n\nIMPORTANT: unlike every other binding in Warden, this could NOT be verified with a live test-unlock -- root's own device is always in use while Warden is running, so there is no way to safely test it without an actual reboot. A successful bind here is not the same guarantee menus 4/5/8 give you.\n\nDo not close your only access to this machine until you have rebooted and confirmed it unlocks correctly.\n\nYour recovery kit:\n${WARDEN_ROOT_UNLOCK_BOOT_DIR}/${kit_ts} (guide + script)\n${WARDEN_ROOT_UNLOCK_ROOT_DIR}/${kit_ts} (initramfs backup)\n\nRead the guide there before rebooting."
 }
 

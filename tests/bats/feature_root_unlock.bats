@@ -401,8 +401,20 @@ EOF
     [[ "$body" != *"luksRemoveKey"* ]]
 }
 
-@test "root_unlock_action_enable warns that test-unlock success doesn't prove the initramfs path works" {
+@test "root_unlock_action_enable never attempts a live test-unlock -- root's device is always in use while Warden runs" {
+    # Regression test for a real failure found on real hardware:
+    # root's LUKS device is *always* already open/mounted whenever
+    # Warden itself is running (Warden runs from the booted OS on that
+    # very device), so cryptsetup refuses a second mapping outright
+    # every single time ("Cannot use device ... which is in use").
+    # Unlike the ZFS case, there is no export/close/reopen workaround
+    # possible here: you cannot unmount a running system's own root
+    # filesystem to test it. The first version of this action called
+    # test_unlock_and_cleanup anyway and it failed on the very first
+    # real-hardware run.
     local body
     body="$(declare -f root_unlock_action_enable)"
-    [[ "$body" == *"does NOT prove the initramfs boot-time path works"* ]]
+    [[ "$body" != *"test_unlock_and_cleanup"* ]]
+    [[ "$body" == *"could NOT be verified with a live test-unlock"* ]]
+    [[ "$body" == *"actual reboot is the only real proof"* || "$body" == *"reboot and confirmed"* ]]
 }
