@@ -355,6 +355,18 @@ EOF
     [[ "$body" == *"is_tpm2_present"* ]]
 }
 
+@test "root_unlock_action_enable also checks clevis-tpm2 is installed, not just TPM hardware presence" {
+    # Found while preparing the real-hardware test: is_tpm2_present only
+    # confirms the TPM device node exists -- it says nothing about
+    # whether the clevis-tpm2 package (which actually implements the
+    # tpm2 pin for clevis) is installed. Binding would otherwise fail
+    # confusingly mid-sequence, after the recovery-media confirmation
+    # and initramfs regeneration had already happened.
+    local body
+    body="$(declare -f root_unlock_action_enable)"
+    [[ "$body" == *'is_pkg_installed clevis-tpm2'* ]]
+}
+
 @test "root_unlock_action_enable hard-blocks a same-host Tang address" {
     local body
     body="$(declare -f root_unlock_action_enable)"

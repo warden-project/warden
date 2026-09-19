@@ -503,6 +503,10 @@ root_unlock_action_enable() {
             warden_msg "No TPM2 device found" "Neither /dev/tpm0 nor /dev/tpmrm0 exists on this host. Cannot offer a TPM2 pin here."
             return 0
         fi
+        if ! is_pkg_installed clevis-tpm2; then
+            warden_msg "clevis-tpm2 not installed" "A TPM2 chip is present, but the clevis-tpm2 package (which actually implements the tpm2 pin) isn't installed. Install it from menu 1 first."
+            return 0
+        fi
         pin_config="$(build_tpm2_pin_config)"
     else
         local host_port host port url
