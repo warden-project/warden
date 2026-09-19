@@ -15,12 +15,34 @@ accidentally from the general enrolment wizard). This section is now
 the full design; `original-spec.md` remains the source of the original
 constraints it must satisfy.
 
-**Status: designed, not implemented.** Everything below came out of a
-design discussion, not real-hardware testing — unlike the ZFS section
-above, none of this has been built or verified yet. One specific piece
-(LAN-Tang networking inside initramfs) is explicitly flagged as
-needing empirical verification before it can be trusted, not just
-reasoned about.
+**Status: in progress, and the core TPM2 path is now real-hardware
+validated.** The safety-check primitives, recovery kit generation, and
+the Enable action are built and tested (`lib/features/root_unlock.sh`),
+though still deliberately unwired from `bin/warden`'s main menu until
+Add/Remove/Rotate/Status/Snapshot/Disable exist too. Confirmed on the
+LUKS-root test VM via an actual reboot: `clevis luks bind` for a TPM2
+pin succeeded following the install→regenerate→bind sequencing fix
+below, and on reboot `systemd-cryptsetup` found the volume "already
+active" by the time the real OS started — meaning the initramfs-stage
+Clevis unlock succeeded before that point, with zero manual
+intervention. This is the single riskiest claim in the whole design
+(a wrong answer here means an unbootable machine), and it now has real
+proof behind it, not just reasoning. LAN-Tang's networking-in-initramfs
+question (below) is still unverified. Remaining actions
+(Add/Remove/Rotate/Status/Snapshot/Disable) are not yet built.
+
+**A second real bug was found on the very first test run**, more
+fundamental than anything ZFS hit: root's LUKS device is *always*
+already open/mounted whenever Warden itself is running (Warden runs
+from the booted OS on that very device), so the generic
+`test_unlock_and_cleanup` used everywhere else in Warden fails every
+time with "Cannot use device ... which is in use." Unlike ZFS, there
+is no export/close/reopen workaround possible — you cannot unmount a
+running system's own root filesystem to test it. Fixed by removing the
+live test-unlock attempt entirely for root: `clevis luks bind`'s own
+successful exit is the only automated signal available, and Enable's
+completion message says so explicitly, making clear this is a weaker
+guarantee than every other binding path in Warden gives.
 
 ### Scope decisions
 
