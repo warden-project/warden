@@ -177,9 +177,13 @@ in the same state it would have without the test running at all.
   11 and menu 12 still share zero code path (verified via grep, same
   as before).
 
-Not yet validated against a real reboot/real hardware the way menu
-1/4 were (a synthetic-content confirmation on the dev VM would be
-straightforward to add later, but hasn't been done).
+Confirmed live on the test VM: created a real ZFS-backed device
+through menu 4, ran "forget" through the real TUI, and verified the
+unit was disabled and the pool exported (not destroyed) — re-importing
+it manually afterward confirmed the data was still fully intact. A
+reboot isn't the right test for this action specifically, since its
+whole purpose is to make the device stop doing anything automatic at
+boot; the create → forget → re-import cycle is the real proof.
 
 ### Done: menu 7
 
