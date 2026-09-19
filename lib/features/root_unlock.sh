@@ -395,3 +395,63 @@ create_root_unlock_recovery_kit() {
     printf '%s' "$ts"
 }
 
+# --- Enable/Disable sequencing ------------------------------------------
+#
+# current_initramfs_path — the current kernel's initramfs image path.
+# Wrapped in its own function (rather than inlined at each call site)
+# so it's one obvious place to override for tests.
+current_initramfs_path() {
+    printf '/boot/initrd.img-%s' "$(uname -r)"
+}
+
+# is_root_unlock_enabled — true if clevis-initramfs is installed. Used
+# to redirect Enable to Add/Rotate instead of redoing setup once
+# already configured.
+is_root_unlock_enabled() {
+    is_pkg_installed clevis-initramfs
+}
+
+# install_clevis_initramfs_and_regenerate — installs clevis-initramfs
+# (idempotent) and regenerates the current kernel's initramfs.
+#
+# Must run BEFORE binding any pin, not after: a TPM2 binding seals
+# against the TPM's current PCR values at bind time, and regenerating
+# the initramfs can itself change what's measured into those PCRs
+# (depending on the PCR bank in use). Binding first and regenerating
+# second risks the regeneration immediately invalidating the seal it
+# just created -- everything would look correctly configured right up
+# until the first real reboot silently falls back to the passphrase
+# prompt. See docs/future-work.md's "Ordering matters" section.
+install_clevis_initramfs_and_regenerate() {
+    ensure_pkg_installed clevis-initramfs
+    run_cmd "regenerate initramfs for $(uname -r)" -- update-initramfs -u -k "$(uname -r)"
+}
+
+# any_tang_address_is_local <pin_config_json> — true if any Tang URL
+# embedded in <pin_config_json> (a plain tang pin, or an sss pin
+# nesting tang addresses) resolves to this host itself.
+any_tang_address_is_local() {
+    local pin_config="$1" url host
+    while IFS= read -r url; do
+        [[ -n "$url" ]] || continue
+        host="$(python3 -c '
+import sys
+from urllib.parse import urlparse
+print(urlparse(sys.argv[1]).hostname or "")
+' "$url" 2>/dev/null)"
+        [[ -n "$host" ]] || continue
+        is_local_address "$host" && return 0
+    done < <(python3 -c '
+import json, sys
+data = json.loads(sys.argv[1])
+urls = []
+if "url" in data:
+    urls.append(data["url"])
+for pin in data.get("pins", {}).get("tang", []):
+    if "url" in pin:
+        urls.append(pin["url"])
+print("\n".join(urls))
+' "$pin_config" 2>/dev/null)
+    return 1
+}
+

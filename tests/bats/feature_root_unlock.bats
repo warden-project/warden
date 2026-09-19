@@ -256,6 +256,53 @@ EOF
     [ "$status" -ne 0 ]
 }
 
+@test "current_initramfs_path uses the running kernel version" {
+    [ "$(current_initramfs_path)" = "/boot/initrd.img-$(uname -r)" ]
+}
+
+@test "is_root_unlock_enabled reflects whether clevis-initramfs is installed" {
+    local out expected
+    out="$(is_root_unlock_enabled && echo yes || echo no)"
+    if is_pkg_installed clevis-initramfs; then expected="yes"; else expected="no"; fi
+    [ "$out" = "$expected" ]
+}
+
+@test "install_clevis_initramfs_and_regenerate in dry-run mode does not touch anything" {
+    WARDEN_DRY_RUN=1 install_clevis_initramfs_and_regenerate
+    grep -q "DRY-RUN" "$WARDEN_LOG_FILE"
+    run grep -q "RUN regenerate initramfs" "$WARDEN_LOG_FILE"
+    [ "$status" -ne 0 ]
+}
+
+@test "any_tang_address_is_local is true for a plain tang pin pointing at this host" {
+    local own_ip
+    own_ip="$(ip -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -n1)"
+    if [ -z "$own_ip" ]; then
+        skip "no global-scope address found on this machine to test against"
+    fi
+    local pin_config
+    pin_config="$(build_tang_pin_config "http://${own_ip}:7500")"
+    any_tang_address_is_local "$pin_config"
+}
+
+@test "any_tang_address_is_local is false for a plain tang pin pointing elsewhere" {
+    local pin_config
+    pin_config="$(build_tang_pin_config "http://203.0.113.1:7500")"
+    run any_tang_address_is_local "$pin_config"
+    [ "$status" -ne 0 ]
+}
+
+@test "any_tang_address_is_local checks every address nested inside an sss pin, not just the first" {
+    local pin_config
+    pin_config="$(build_sss_pin_config 1 "$(printf 'http://203.0.113.1:7500\nhttp://127.0.0.1:7500')" 0)"
+    any_tang_address_is_local "$pin_config"
+}
+
+@test "any_tang_address_is_local is false for a plain tpm2 pin (no tang addresses at all)" {
+    run any_tang_address_is_local "$(build_tpm2_pin_config)"
+    [ "$status" -ne 0 ]
+}
+
 @test "create_root_unlock_recovery_kit respects retention across repeated calls" {
     WARDEN_ROOT_UNLOCK_BOOT_DIR="${TEST_TMPDIR}/boot-kits4"
     WARDEN_ROOT_UNLOCK_ROOT_DIR="${TEST_TMPDIR}/root-kits4"
