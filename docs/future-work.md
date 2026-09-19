@@ -7,10 +7,251 @@ whenever picked up.
 
 ## Root-drive unlock (`clevis-initramfs`)
 
-Already noted as deferred, high-risk, separate scope in
-[`original-spec.md`](original-spec.md) (see "Root-drive unlock" there
-for the specific extra warnings it would need). Not repeated here in
-full — that document is the source of truth for this one.
+Designed 2026-09-19, not yet started. Originally deferred as
+high-risk, separate scope in [`original-spec.md`](original-spec.md)
+("Root-drive unlock" section — never remove the original passphrase
+slot, confirm a recovery path exists first, never reachable
+accidentally from the general enrolment wizard). This section is now
+the full design; `original-spec.md` remains the source of the original
+constraints it must satisfy.
+
+**Status: designed, not implemented.** Everything below came out of a
+design discussion, not real-hardware testing — unlike the ZFS section
+above, none of this has been built or verified yet. One specific piece
+(LAN-Tang networking inside initramfs) is explicitly flagged as
+needing empirical verification before it can be trusted, not just
+reasoned about.
+
+### Scope decisions
+
+- **Root must already be LUKS-encrypted** (via Ubuntu's installer, at
+  install time). This feature enrols Clevis onto an *existing*
+  encrypted root, exactly like menus 4/5 do for secondary drives — it
+  does not encrypt an unencrypted root in place. That's a categorically
+  different, much riskier operation and stays out of scope entirely.
+- **Pin types: TPM2 and LAN-only Tang.** A Tailscale-routed Tang
+  address can never work for root: `tailscaled` is a full userspace
+  daemon that needs the real OS running, which can't happen before
+  root is even mounted. Not a reachability nuance — a hard
+  impossibility, so it's enforced as a hard block, not a warning.
+- **A same-host Tang address is also a hard block, for a sharper
+  reason than "unreachable."** If the Tang server this host depends on
+  for root-unlock runs *on this same machine*, it's a bootstrapping
+  deadlock, not a networking problem: Tang runs as a systemd service,
+  which can't start until the real root filesystem is mounted, and
+  root can't mount until it's unlocked. This would look perfectly
+  configured — bind succeeds, even a post-boot test-unlock succeeds,
+  since that runs after the OS is already up — right up until the
+  reboot that bricks it. Detected via checking whether a candidate
+  Tang address resolves to any of this host's own currently-assigned
+  addresses (not just literal `127.0.0.1` — a LAN IP that happens to
+  be this host's own counts too), not just a fixed loopback check.
+- **New menu 13** (`Root-drive unlock`), Exit moves to 14. Kept fully
+  self-contained rather than folded into existing menus, matching the
+  spec's requirement that this never be accidentally reachable from
+  the general wizard — the same reasoning that already keeps the
+  Danger Zone (menu 11) structurally separate from Uninstall (menu 12).
+
+### Menu 13's actions: Enable, Add, Remove, Rotate, Status, Snapshot, Disable
+
+No device picker anywhere in this menu — there's only ever one root
+device, resolved fresh each time, never cached, consistent with the
+rest of the project's "never trust a stale device reference" rule.
+
+Binding management (Add/Remove/Rotate) can't just delegate to menu 8,
+even though a root LUKS device is mechanically identical to any other
+once it has bindings: menu 8's device list is already built from
+`managed_luks_devices`, which excludes root via the same
+`guard_not_system_critical` check menu 5 uses. Reusing menu 8 directly
+would reintroduce exactly the "accidentally reachable from the general
+wizard" risk the spec warns against. So menu 13 needs its own thin
+add/remove/rotate, reusing the underlying `run_clevis_luks_bind` /
+`run_clevis_luks_unbind` / hard non-Clevis-slot-gate primitives
+internally, but as a structurally distinct entry point — the same
+relationship danger_erase.sh already has with uninstall.sh (shares
+low-level primitives, shares zero code path at the menu level).
+
+- **Enable** — first-time setup. Resolves the root device fresh,
+  refuses if it isn't already LUKS-encrypted, requires an explicit
+  recovery-media confirmation ("do you have bootable recovery/rescue
+  media for this machine ready right now?") before anything else, then
+  pin selection (TPM2, checked present via `/dev/tpm0`/`/dev/tpmrm0`
+  rather than assumed; or LAN-Tang, validated against the same-host
+  block). See "Ordering matters" below for the critical sequencing
+  detail. If already enabled, points at Add/Rotate instead of
+  redoing setup.
+- **Add** — bind an additional pin alongside whatever's already there
+  (e.g. TPM2 now, LAN-Tang added later). Shows current bindings first,
+  same "state before action" pattern as menu 8. Since the
+  `clevis-initramfs` boot script reads bindings live off the LUKS
+  header at boot time rather than baking them into the initramfs
+  image, **this needs no initramfs regeneration at all** — a
+  meaningfully lower-stakes operation than Enable/Disable. Test-unlocks
+  the new slot specifically before declaring success.
+- **Remove** / **Rotate** — same shape as menu 8's equivalents, same
+  hard gate that structurally prevents ever touching a non-Clevis
+  (passphrase) slot. No initramfs regeneration needed here either, for
+  the same reason as Add.
+- **Status** — current root binding state, plus a drift check: does
+  the on-disk initramfs still match what the latest recovery kit
+  backed up (mtime/checksum), or has something regenerated it since
+  (see "Other processes can regenerate initramfs too" below). If a
+  TPM2 pin is in use and drift is detected, says so explicitly — an
+  initramfs content change is exactly the kind of thing that can
+  silently invalidate a PCR-sealed TPM2 binding.
+- **Snapshot** — manually regenerate the recovery kit (guide + script
+  + fresh initramfs backup) on demand, independent of changing
+  anything else. Exists specifically for the drift scenario: a stale
+  kit doesn't have to wait for the next actual Enable/Disable to get
+  refreshed.
+- **Disable** — full revert, not just a package removal: remove every
+  Clevis binding from root first (reverting to passphrase-only, same
+  hard gate as Remove), *then* uninstall `clevis-initramfs` and
+  regenerate to strip the hook out — with its own backup-first step,
+  same as Enable. Existing recovery kits from earlier enables are left
+  alone, not auto-deleted (they're the operator's own safety net;
+  destroying them as a side effect of an unrelated action would be
+  wrong, matching how menu 12 already treats everything else
+  non-destructively).
+
+### Ordering matters: regenerate the initramfs *before* binding, not after
+
+The one must-fix sequencing detail from the design discussion.
+`clevis luks bind ... tpm2 ...` seals against the TPM's *current* PCR
+values at bind time. Installing `clevis-initramfs` and running
+`update-initramfs -u` changes the initramfs image's content, which —
+depending on the PCR bank in use — can itself be measured into the
+same PCRs a TPM2 binding seals against. Binding *then* regenerating
+would risk the regeneration immediately invalidating the seal it just
+created: everything would look correctly configured, and the first
+real reboot would silently fall through to the passphrase prompt, with
+no obvious explanation why. Enable's actual sequence must be: install
+the hook, run `update-initramfs -u` once to reach the initramfs's
+final stable state, *then* bind — sealing against PCR values that
+won't change again as a direct result of Warden's own actions. Doesn't
+matter for Tang, but applying it universally keeps one code path
+instead of two. The backup-before-change step still captures the
+*pre-regeneration* image, regardless of this reordering.
+
+This is the same TPM2/PCR fragility already acknowledged elsewhere in
+the project (menu 1's clevis-tpm2 install prompt: "PCR-sealed bindings
+can break after firmware/kernel updates and need a re-bind") — just
+more acute here, since Enable's own actions can trigger it on day one
+if sequenced wrong, and the consequence for root (silent fallback to
+an interactive prompt on what might be a headless/remote box) is more
+severe than for a secondary drive.
+
+### The recovery kit
+
+Generated by Enable (first bind), Disable (revert), and on-demand by
+Snapshot. Two real design points came out of discussion, beyond the
+already-agreed shape (retention count 3, oldest pruned on creation of
+a new one, never below 1 while enabled, size-checked before writing,
+explicitly communicated to the user that it lives under `/root`):
+
+- **Split storage, not one location.** `/root` is *inside* the
+  encrypted root filesystem. In the worst failure case — the
+  initramfs itself won't even build/boot far enough to reach the
+  normal interactive passphrase prompt — instructions stored there are
+  stuck behind the very lock they're meant to help recover from. (Not
+  fully broken: the passphrase slot is never removed, so a rescue boot
+  can always manually `cryptsetup open` and get in from there — but
+  requiring someone to already succeed at manual unlock before they
+  can read *how* to fix things is backwards.) Ubuntu's standard
+  encrypted-install layout keeps `/boot` itself unencrypted
+  specifically so GRUB can read it pre-unlock. Split it: the small
+  text guide + standalone script go on `/boot` (always reachable, tiny
+  footprint, readable even before anything is unlocked); the
+  multi-megabyte initramfs backup itself stays under `/root`
+  (restoring it requires write access to `/boot` anyway, which is only
+  available once root is reachable one way or another, so the backup
+  itself doesn't need to be pre-unlock accessible the way the
+  *instructions* do). Also avoids piling large binaries onto what's
+  often a deliberately small partition.
+- **The guide must be honest about staleness.** Every regeneration
+  trigger Warden doesn't control (see below) means a kit can be
+  correct as of its own timestamp but no longer reflect the current
+  system. The guide states this explicitly: "this snapshot reflects
+  the system as of `<timestamp>`; if kernel or package updates have
+  happened since, restoring it will also undo those" — so a restore
+  doesn't surprise anyone with an over-broad rollback.
+- **The recovery script is fully self-contained** — no dependency on
+  Warden's own `lib/` being sourceable, since it needs to work from a
+  rescue environment where the real root filesystem (and Warden's code
+  with it) might not be mounted at all. Every value (root UUID, exact
+  kernel version, exact backup/target paths) is baked in at generation
+  time, nothing computed or guessed at recovery time. Before touching
+  anything, it checks whether the system looks *already healthy* (if
+  it can run interactively at all, the machine clearly already
+  booted), shows current state (running kernel vs. the kernel this
+  backup targets, the target file's current size/timestamp), requires
+  an explicit typed confirmation, and backs up whatever it's about to
+  overwrite first — guarding specifically against being run against a
+  currently-healthy install by mistake.
+
+### Other processes can regenerate the initramfs too
+
+Kernel upgrades (routine, automatic under `unattended-upgrades`),
+manual `update-initramfs -u` runs for unrelated reasons, and dpkg
+triggers fired by *any* package that ships an initramfs hook can all
+regenerate the image independent of Warden. None of this threatens
+root-unlock actually continuing to work — the clevis hook is
+registered at the package level and gets included in every future
+regeneration automatically, regardless of what triggered it. What it
+threatens is the recovery kit's *honesty*: it's only ever a snapshot
+of the moment Warden itself last changed something, so it can silently
+go stale relative to what's actually on disk. Addressed by the drift
+check in Status (compare current on-disk initramfs against what the
+latest kit recorded) and the honest staleness caveat in the guide
+text above — deliberately not by silently auto-refreshing on a guess.
+
+### Preconditions to check, not assume
+
+- **GRUB already has cryptodisk support configured**
+  (`GRUB_ENABLE_CRYPTODISK=y`, existing `cryptomount` entries
+  referencing this root's UUID) — should already be true if root was
+  encrypted via the installer, but Warden should verify this directly
+  rather than assume it, and refuse cleanly if it isn't. Root-unlock
+  only adds a Clevis keyslot and an initramfs hook; it never touches
+  GRUB configuration itself, so if GRUB can't already get into the
+  initramfs stage against an encrypted volume, nothing here will fix
+  that.
+- **TPM2 device actually present** (`/dev/tpm0` or `/dev/tpmrm0`)
+  before offering the TPM2 pin option at all.
+- **Secure Boot / Unified Kernel Image caveat** (lower priority): a
+  standard Ubuntu Server 24.04 boot layout (GRUB + shim + separate
+  vmlinuz/initrd.img, not a UKI) doesn't sign or verify the initramfs
+  itself even under Secure Boot, so this shouldn't block the project's
+  stated scope — but worth a one-line precondition note for anyone
+  running an unusual setup where initramfs integrity is enforced.
+
+### Open technical question: does LAN-Tang need a GRUB kernel-parameter change too?
+
+Tang unlock inside initramfs needs actual networking up before root is
+mounted. `clevis-initramfs` ships some automatic DHCP bring-up, but
+whether that reliably works without an explicit `ip=` kernel
+command-line parameter (which would mean also touching
+`GRUB_CMDLINE_LINUX` and running `update-grub` — a step TPM2 never
+needs) isn't resolvable by reasoning alone; it needs testing against
+real hardware. Until verified, treat TPM2 as the definitely-solid path
+and LAN-Tang as "supported, pending that verification" rather than
+equally trusted.
+
+### Testing
+
+Needs a *second* disposable VM, since the existing one has a plain
+(non-LUKS) root by deliberate original design (root-unlock was out of
+scope when it was built) and can't be converted in place. Built via
+Ubuntu's installer with "encrypt this installation" checked, OVMF-TPM
+BIOS (same as the existing VM, so the emulated TPM2 is available).
+Validation plan once built: TPM2-only Enable with a real reboot, the
+LAN-Tang networking question above, the same-host-Tang refusal
+actually triggering against a Tang instance on the VM itself, Add
+after Enable requiring no initramfs touch, Disable's full revert
+sequence, and a deliberate near-miss (corrupt/replace the initramfs
+some other way) to confirm the backup-and-recover story — including
+the standalone script's own safeguards — actually works, not just the
+happy path.
 
 ## ZFS pool/dataset support
 
