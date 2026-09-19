@@ -38,6 +38,8 @@ source "${WARDEN_ROOT}/lib/features/tang_server.sh"
 source "${WARDEN_ROOT}/lib/features/tang_bindings.sh"
 # shellcheck source=lib/features/zfs_pool.sh
 source "${WARDEN_ROOT}/lib/features/zfs_pool.sh"
+# shellcheck source=lib/features/root_unlock.sh
+source "${WARDEN_ROOT}/lib/features/root_unlock.sh"
 # shellcheck source=lib/features/luks_enroll.sh
 source "${WARDEN_ROOT}/lib/features/luks_enroll.sh"
 # shellcheck source=lib/features/luks_setup.sh
