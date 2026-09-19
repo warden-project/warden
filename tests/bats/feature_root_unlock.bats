@@ -98,3 +98,178 @@ EOF
     chmod +x "${TEST_TMPDIR}/bin/getent"
     PATH="${TEST_TMPDIR}/bin:${PATH}" is_local_address "fake-self-hostname"
 }
+
+@test "has_enough_disk_space is true for a tiny request and false for an absurd one" {
+    has_enough_disk_space "${TEST_TMPDIR}" 1024
+    run has_enough_disk_space "${TEST_TMPDIR}" $((1024 * 1024 * 1024 * 1024 * 1024))
+    [ "$status" -ne 0 ]
+}
+
+@test "has_enough_disk_space checks the nearest existing ancestor when the path itself doesn't exist yet" {
+    has_enough_disk_space "${TEST_TMPDIR}/does/not/exist/yet" 1024
+}
+
+@test "generate_recovery_guide_text includes every value passed in, with no leftover placeholders" {
+    local out
+    out="$(generate_recovery_guide_text "20260920T000000Z" "myhost" "abc-uuid-123" "def-boot-uuid-456" "6.8.0-generic" "/boot/warden-root-unlock-recovery/20260920T000000Z" "/root/warden-root-unlock-recovery/20260920T000000Z/initrd.img.bak" "/boot/initrd.img-6.8.0-generic")"
+    [[ "$out" == *"20260920T000000Z"* ]]
+    [[ "$out" == *"myhost"* ]]
+    [[ "$out" == *"abc-uuid-123"* ]]
+    [[ "$out" == *"def-boot-uuid-456"* ]]
+    [[ "$out" == *"6.8.0-generic"* ]]
+    [[ "$out" == *"/root/warden-root-unlock-recovery/20260920T000000Z/initrd.img.bak"* ]]
+    [[ "$out" == *"/boot/initrd.img-6.8.0-generic"* ]]
+    # No angle-bracket-style "fill this in yourself" placeholders left
+    # for the reader to resolve under pressure.
+    [[ "$out" != *"<this"* ]]
+    [[ "$out" != *"as appropriate>"* ]]
+}
+
+@test "generate_recovery_guide_text states the staleness caveat explicitly" {
+    local out
+    out="$(generate_recovery_guide_text "ts" "h" "u" "bu" "k" "b" "r" "t")"
+    [[ "$out" == *"reflects the system as of"* ]]
+    [[ "$out" == *"will also undo those"* ]]
+}
+
+@test "generate_recovery_script_text produces syntactically valid bash" {
+    local script_file
+    script_file="${TEST_TMPDIR}/restore.sh"
+    generate_recovery_script_text "ts" "/root/backup" "/boot/target" "6.8.0-generic" > "$script_file"
+    bash -n "$script_file"
+}
+
+@test "generate_recovery_script_text is fully self-contained: no reference to Warden's own lib files" {
+    local out
+    out="$(generate_recovery_script_text "ts" "/root/backup" "/boot/target" "6.8.0-generic")"
+    [[ "$out" != *"lib/core"* ]]
+    [[ "$out" != *"lib/features"* ]]
+    [[ "$out" != *"source "*".sh"* ]]
+}
+
+@test "the generated recovery script cancels cleanly on anything other than RESTORE" {
+    local backup_file="${TEST_TMPDIR}/backup.img" target_file="${TEST_TMPDIR}/target.img" script_file="${TEST_TMPDIR}/restore.sh"
+    printf 'backup-content' > "$backup_file"
+    printf 'original-target-content' > "$target_file"
+    generate_recovery_script_text "ts" "$backup_file" "$target_file" "some-other-kernel" > "$script_file"
+    chmod +x "$script_file"
+    run bash -c "echo 'not restore' | '$script_file'"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Cancelled"* ]]
+    [ "$(cat "$target_file")" = "original-target-content" ]
+}
+
+@test "the generated recovery script restores the backup and preserves the overwritten file when confirmed" {
+    local backup_file="${TEST_TMPDIR}/backup.img" target_file="${TEST_TMPDIR}/target.img" script_file="${TEST_TMPDIR}/restore.sh"
+    printf 'backup-content' > "$backup_file"
+    printf 'original-target-content' > "$target_file"
+    generate_recovery_script_text "ts" "$backup_file" "$target_file" "some-other-kernel" > "$script_file"
+    chmod +x "$script_file"
+    run bash -c "echo 'RESTORE' | '$script_file'"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Restored"* ]]
+    [ "$(cat "$target_file")" = "backup-content" ]
+    # The file it overwrote must itself have been preserved, not lost.
+    local preserved
+    preserved="$(find "${TEST_TMPDIR}" -maxdepth 1 -name 'target.img.pre-restore-*')"
+    [ -n "$preserved" ]
+    [ "$(cat "$preserved")" = "original-target-content" ]
+}
+
+@test "the generated recovery script refuses cleanly when the backup file is missing" {
+    local backup_file="${TEST_TMPDIR}/does-not-exist.img" target_file="${TEST_TMPDIR}/target2.img" script_file="${TEST_TMPDIR}/restore2.sh"
+    printf 'original' > "$target_file"
+    generate_recovery_script_text "ts" "$backup_file" "$target_file" "k" > "$script_file"
+    chmod +x "$script_file"
+    run bash -c "echo 'RESTORE' | '$script_file'"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"backup file not found"* ]]
+    [ "$(cat "$target_file")" = "original" ]
+}
+
+@test "the generated recovery script warns when run on a system already on the target kernel" {
+    local backup_file="${TEST_TMPDIR}/backup3.img" target_file="${TEST_TMPDIR}/target3.img" script_file="${TEST_TMPDIR}/restore3.sh"
+    printf 'backup' > "$backup_file"
+    printf 'target' > "$target_file"
+    generate_recovery_script_text "ts" "$backup_file" "$target_file" "$(uname -r)" > "$script_file"
+    chmod +x "$script_file"
+    run bash -c "echo 'not restore' | '$script_file'"
+    [[ "$output" == *"WARNING"* ]]
+    [[ "$output" == *"likely nothing to restore"* ]]
+}
+
+@test "prune_recovery_kits keeps only the most recent N and removes the rest" {
+    local dir="${TEST_TMPDIR}/kits"
+    mkdir -p "$dir"/2026010100000{1,2,3,4,5}Z
+    prune_recovery_kits "$dir" 3
+    [ "$(find "$dir" -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 3 ]
+    [ ! -d "${dir}/20260101000001Z" ]
+    [ ! -d "${dir}/20260101000002Z" ]
+    [ -d "${dir}/20260101000005Z" ]
+}
+
+@test "prune_recovery_kits never prunes below 1 even if retain is passed as 0" {
+    local dir="${TEST_TMPDIR}/kits2"
+    mkdir -p "$dir"/2026010100000{1,2}Z
+    prune_recovery_kits "$dir" 0
+    [ "$(find "$dir" -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 1 ]
+}
+
+@test "prune_recovery_kits does nothing when the directory doesn't exist yet" {
+    run prune_recovery_kits "${TEST_TMPDIR}/does-not-exist-kits" 3
+    [ "$status" -eq 0 ]
+}
+
+@test "create_root_unlock_recovery_kit in dry-run mode does not write anything" {
+    WARDEN_ROOT_UNLOCK_BOOT_DIR="${TEST_TMPDIR}/boot-kits"
+    WARDEN_ROOT_UNLOCK_ROOT_DIR="${TEST_TMPDIR}/root-kits"
+    local source="${TEST_TMPDIR}/initrd.img-fake"
+    printf 'fake-initramfs-content' > "$source"
+    WARDEN_DRY_RUN=1 create_root_unlock_recovery_kit "$source" >/dev/null
+    [ ! -d "$WARDEN_ROOT_UNLOCK_BOOT_DIR" ]
+    [ ! -d "$WARDEN_ROOT_UNLOCK_ROOT_DIR" ]
+    grep -q "DRY-RUN" "$WARDEN_LOG_FILE"
+}
+
+@test "create_root_unlock_recovery_kit writes a full kit with backup, guide, script, and latest symlinks" {
+    WARDEN_ROOT_UNLOCK_BOOT_DIR="${TEST_TMPDIR}/boot-kits"
+    WARDEN_ROOT_UNLOCK_ROOT_DIR="${TEST_TMPDIR}/root-kits"
+    local source="${TEST_TMPDIR}/initrd.img-6.8.0-fake"
+    printf 'fake-initramfs-content' > "$source"
+
+    local ts
+    ts="$(WARDEN_DRY_RUN=0 create_root_unlock_recovery_kit "$source")"
+    [ -n "$ts" ]
+
+    [ -f "${WARDEN_ROOT_UNLOCK_BOOT_DIR}/${ts}/GUIDE.txt" ]
+    [ -x "${WARDEN_ROOT_UNLOCK_BOOT_DIR}/${ts}/restore.sh" ]
+    [ -f "${WARDEN_ROOT_UNLOCK_ROOT_DIR}/${ts}/initrd.img.bak" ]
+    [ "$(cat "${WARDEN_ROOT_UNLOCK_ROOT_DIR}/${ts}/initrd.img.bak")" = "fake-initramfs-content" ]
+    [ "$(readlink "${WARDEN_ROOT_UNLOCK_BOOT_DIR}/latest")" = "$ts" ]
+    [ "$(readlink "${WARDEN_ROOT_UNLOCK_ROOT_DIR}/latest")" = "$ts" ]
+}
+
+@test "create_root_unlock_recovery_kit refuses when the source initramfs doesn't exist" {
+    WARDEN_ROOT_UNLOCK_BOOT_DIR="${TEST_TMPDIR}/boot-kits3"
+    WARDEN_ROOT_UNLOCK_ROOT_DIR="${TEST_TMPDIR}/root-kits3"
+    run create_root_unlock_recovery_kit "${TEST_TMPDIR}/does-not-exist-initramfs"
+    [ "$status" -ne 0 ]
+}
+
+@test "create_root_unlock_recovery_kit respects retention across repeated calls" {
+    WARDEN_ROOT_UNLOCK_BOOT_DIR="${TEST_TMPDIR}/boot-kits4"
+    WARDEN_ROOT_UNLOCK_ROOT_DIR="${TEST_TMPDIR}/root-kits4"
+    WARDEN_ROOT_UNLOCK_RETAIN=2
+    local source="${TEST_TMPDIR}/initrd.img-x"
+    printf 'v1' > "$source"
+    create_root_unlock_recovery_kit "$source" >/dev/null
+    sleep 1
+    printf 'v2' > "$source"
+    create_root_unlock_recovery_kit "$source" >/dev/null
+    sleep 1
+    printf 'v3' > "$source"
+    create_root_unlock_recovery_kit "$source" >/dev/null
+
+    [ "$(find "$WARDEN_ROOT_UNLOCK_BOOT_DIR" -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 2 ]
+    [ "$(find "$WARDEN_ROOT_UNLOCK_ROOT_DIR" -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 2 ]
+}
