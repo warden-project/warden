@@ -278,7 +278,13 @@ present, `/boot` correctly separate/unencrypted (see the precondition
 correction above, found from checking this real install directly).
 LAN-reachable from the same network as the first VM, so LAN-Tang
 testing can point at the first VM's already-running Tang server for a
-genuine cross-host case.
+genuine cross-host case. The first VM's Tang is deliberately kept on a
+non-default port (7591, reconfigured via menu 2 itself rather than by
+hand, which incidentally re-exercised that menu for real and caught
+two unrelated real bugs — see Lessons Learned) at `192.168.86.41`, so
+it's ready as the LAN-Tang test target whenever this gets picked up:
+point the LUKS-root VM's root-unlock Tang pin at
+`192.168.86.41:7591`.
 
 Validation plan: TPM2-only Enable with a real reboot, the LAN-Tang
 networking question above, the same-host-Tang refusal actually
