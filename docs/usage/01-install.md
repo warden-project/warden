@@ -14,6 +14,16 @@ what each component does, before asking what to install.
   after firmware/kernel updates.
 - Optionally offers `zfsutils-linux` when Clevis is selected, letting
   menus 4/5 create or enrol a device as a single-disk ZFS pool.
+- Optionally offers Tailscale, regardless of whether Tang, Clevis, or
+  both were selected — it's equally relevant to a Tang server host
+  (reachable over the tailnet instead of the open network) and a
+  Clevis client host (reaching a Tang server the same way). Since
+  Tailscale isn't in Ubuntu's default archives, this first adds
+  Tailscale's own apt repository and signing key (fetched directly
+  from `pkgs.tailscale.com`, written to disk — never piped into a
+  shell) before installing the package. This only installs the
+  package: joining a tailnet (`tailscale up`) is a separate,
+  credential-specific step left to you.
 - Confirms Ubuntu's `universe` archive is enabled first, enabling it if
   not.
 - Every install check is idempotent: already-installed packages are

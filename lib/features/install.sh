@@ -12,6 +12,55 @@ WARDEN_TANG_PKGS=(tang)
 WARDEN_CLEVIS_CORE_PKGS=(clevis clevis-luks clevis-systemd)
 WARDEN_CLEVIS_TPM2_PKG=clevis-tpm2
 WARDEN_ZFS_PKG=zfsutils-linux
+WARDEN_TAILSCALE_PKG=tailscale
+: "${WARDEN_TAILSCALE_KEYRING:=/usr/share/keyrings/tailscale-archive-keyring.gpg}"
+: "${WARDEN_TAILSCALE_APT_LIST:=/etc/apt/sources.list.d/tailscale.list}"
+: "${WARDEN_OS_RELEASE_FILE:=/etc/os-release}"
+
+# ubuntu_codename — this host's Ubuntu release codename (e.g. "noble"),
+# read fresh from /etc/os-release each call rather than hardcoded, so
+# this doesn't silently go stale if the supported release ever changes.
+# Falls back to "noble" (24.04, this project's only supported release)
+# if the file is missing or doesn't set VERSION_CODENAME.
+ubuntu_codename() {
+    local codename
+    # shellcheck source=/dev/null
+    codename="$(. "$WARDEN_OS_RELEASE_FILE" 2>/dev/null; echo "${VERSION_CODENAME:-}")"
+    printf '%s' "${codename:-noble}"
+}
+
+# is_tailscale_repo_configured — true if Tailscale's own apt source
+# list is already present.
+is_tailscale_repo_configured() {
+    [[ -f "$WARDEN_TAILSCALE_APT_LIST" ]] && grep -q 'pkgs\.tailscale\.com/stable/ubuntu' "$WARDEN_TAILSCALE_APT_LIST" 2>/dev/null
+}
+
+# ensure_tailscale_repo_configured — idempotent: adds Tailscale's own
+# apt repository and signing key, since Tailscale isn't in Ubuntu's
+# default archives. Fetches a GPG keyring and a plain-text apt source
+# list from Tailscale's own package server -- the same files, and same
+# URLs, their own documented manual (non-interactive) install method
+# uses -- never pipes a remote script into a shell.
+ensure_tailscale_repo_configured() {
+    if is_tailscale_repo_configured; then
+        log_line "PKG: Tailscale apt repo already configured, skipping"
+        return 0
+    fi
+
+    local codename
+    codename="$(ubuntu_codename)"
+
+    if [[ "${WARDEN_DRY_RUN}" == "1" ]]; then
+        log_line "[DRY-RUN] would configure the Tailscale apt repository for ${codename}"
+        printf '[DRY-RUN] would configure the Tailscale apt repository for %s\n' "$codename" >&2
+        return 0
+    fi
+
+    run_cmd "fetch Tailscale's apt signing key" -- curl -fsSL "https://pkgs.tailscale.com/stable/ubuntu/${codename}.noarmor.gpg" -o "$WARDEN_TAILSCALE_KEYRING" || return 1
+    [[ -f "$WARDEN_TAILSCALE_APT_LIST" ]] && backup_file "$WARDEN_TAILSCALE_APT_LIST" >/dev/null
+    run_cmd "fetch Tailscale's apt source list" -- curl -fsSL "https://pkgs.tailscale.com/stable/ubuntu/${codename}.tailscale-keyring.list" -o "$WARDEN_TAILSCALE_APT_LIST" || return 1
+    run_cmd "refresh apt package lists" -- apt-get update
+}
 
 readonly WARDEN_INSTALL_REMINDER="Tang -- the server component. Runs on a machine and answers key-exchange requests. It doesn't keep a list of clients; anything that can reach it can request an exchange, so it's a network-trust model, not an authentication one.
 
@@ -21,7 +70,7 @@ Clevis -- the client component. Installed on each machine that has an encrypted 
 # this menu manages, one line per package.
 describe_install_status() {
     local pkg
-    for pkg in tang clevis clevis-luks clevis-systemd clevis-tpm2 zfsutils-linux; do
+    for pkg in tang clevis clevis-luks clevis-systemd clevis-tpm2 zfsutils-linux tailscale; do
         if is_pkg_installed "$pkg"; then
             printf '  %s: installed\n' "$pkg"
         else
@@ -30,10 +79,10 @@ describe_install_status() {
     done
 }
 
-# install_selected <choice> <install_tpm2:0|1> <install_zfs:0|1>
+# install_selected <choice> <install_tpm2:0|1> <install_zfs:0|1> <install_tailscale:0|1>
 # choice is one of: tang, clevis, both
 install_selected() {
-    local choice="$1" install_tpm2="${2:-0}" install_zfs="${3:-0}"
+    local choice="$1" install_tpm2="${2:-0}" install_zfs="${3:-0}" install_tailscale="${4:-0}"
 
     ensure_universe_enabled
 
@@ -53,6 +102,15 @@ install_selected() {
         if [[ "$install_zfs" == "1" ]]; then
             ensure_pkg_installed "$WARDEN_ZFS_PKG"
         fi
+    fi
+
+    # Not gated on choice, unlike tpm2/zfs above: Tailscale is equally
+    # relevant to a Tang server host (so tangd can be reached safely
+    # over the tailnet instead of the open network) and a Clevis
+    # client host (so it can reach a remote Tang server the same way).
+    if [[ "$install_tailscale" == "1" ]]; then
+        ensure_tailscale_repo_configured
+        ensure_pkg_installed "$WARDEN_TAILSCALE_PKG"
     fi
 }
 
@@ -76,18 +134,23 @@ feature_install_menu() {
         fi
     fi
 
+    local install_tailscale=0
+    if warden_yesno "Optional: Tailscale" "Install Tailscale as well?\n\nLets this host reach (or be reached by) a Tang server over a private tailnet instead of the open network -- relevant whether this host runs Tang, Clevis, or both.\n\nThis only installs the package (adding Tailscale's own apt repository, since it isn't in Ubuntu's default archives). Joining a tailnet ('tailscale up') is a separate, credential-specific step left to you."; then
+        install_tailscale=1
+    fi
+
     warden_msg "clevis-initramfs (root-drive unlock)" "Not offered yet: root-drive unlock needs its own guided wizard with extra safeguards, which hasn't been built. If you need this now, it's a manual, guide-only procedure -- see the wiki."
 
     if warden_yesno "Preview first?" "Show what would be installed without actually installing (dry-run)?"; then
         local saved_dry_run="${WARDEN_DRY_RUN}"
         WARDEN_DRY_RUN=1
-        install_selected "$choice" "$install_tpm2" "$install_zfs"
+        install_selected "$choice" "$install_tpm2" "$install_zfs" "$install_tailscale"
         WARDEN_DRY_RUN="$saved_dry_run"
         if ! warden_yesno "Proceed?" "Proceed with the real installation now?"; then
             return 0
         fi
     fi
 
-    install_selected "$choice" "$install_tpm2" "$install_zfs"
+    install_selected "$choice" "$install_tpm2" "$install_zfs" "$install_tailscale"
     warden_msg "Install complete" "Requested package(s) are installed (or were already present)."
 }
