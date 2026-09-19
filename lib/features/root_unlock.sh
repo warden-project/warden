@@ -519,7 +519,7 @@ root_unlock_action_enable() {
         url="http://${host}:${port}"
         local reach
         reach="$(check_tang_reachability "$url")"
-        if ! warden_yesno "Tang reachability" "${url}: ${reach}\n\nProceed anyway?"; then
+        if ! warden_yesno "Tang reachability" "${url}: ${reach}\n\nThis only proves the Tang server is reachable from this already-booted OS -- it does NOT prove clevis-initramfs can reach it during the initramfs stage, before the real network stack is up. That specific question is still open (see docs/future-work.md); an actual reboot is the only real test.\n\nProceed anyway?"; then
             return 0
         fi
         pin_config="$(build_tang_pin_config "$url")"
@@ -625,7 +625,7 @@ root_unlock_action_add() {
         url="http://${host}:${port}"
         local reach
         reach="$(check_tang_reachability "$url")"
-        if ! warden_yesno "Tang reachability" "${url}: ${reach}\n\nProceed anyway?"; then
+        if ! warden_yesno "Tang reachability" "${url}: ${reach}\n\nThis only proves the Tang server is reachable from this already-booted OS -- it does NOT prove clevis-initramfs can reach it during the initramfs stage, before the real network stack is up. That specific question is still open (see docs/future-work.md); an actual reboot is the only real test.\n\nProceed anyway?"; then
             return 0
         fi
         pin_config="$(build_tang_pin_config "$url")"
@@ -764,7 +764,7 @@ root_unlock_action_rotate() {
         url="http://${host}:${port}"
         local reach
         reach="$(check_tang_reachability "$url")"
-        if ! warden_yesno "Tang reachability" "${url}: ${reach}\n\nProceed anyway?"; then
+        if ! warden_yesno "Tang reachability" "${url}: ${reach}\n\nThis only proves the Tang server is reachable from this already-booted OS -- it does NOT prove clevis-initramfs can reach it during the initramfs stage, before the real network stack is up. That specific question is still open (see docs/future-work.md); an actual reboot is the only real test.\n\nProceed anyway?"; then
             return 0
         fi
         pin_config="$(build_tang_pin_config "$url")"

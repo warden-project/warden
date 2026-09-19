@@ -443,6 +443,20 @@ EOF
     [[ "$body" == *"bootstrapping deadlock"* ]]
 }
 
+@test "root_unlock's Tang reachability check is explicit that it doesn't prove initramfs-stage reachability" {
+    # Raised as a question, not found as a live failure: check_tang_reachability
+    # runs curl from the already-booted OS's full network stack -- it says
+    # nothing about whether clevis-initramfs's own network bring-up can reach
+    # the same server before the real OS is even running. Every place root
+    # unlock offers a Tang pin (Enable, Add, Rotate) must say so explicitly,
+    # since that gap is exactly what an actual reboot is still needed to prove.
+    for fn in root_unlock_action_enable root_unlock_action_add root_unlock_action_rotate; do
+        local body
+        body="$(declare -f "$fn")"
+        [[ "$body" == *"does NOT prove clevis-initramfs can reach it"* ]]
+    done
+}
+
 @test "root_unlock_action_add checks clevis-tpm2 is installed, not just TPM hardware presence" {
     local body
     body="$(declare -f root_unlock_action_add)"

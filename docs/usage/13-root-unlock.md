@@ -20,6 +20,17 @@ already running), and neither can a Tang server on this same machine
 (it can't start until root is already mounted, which can't happen
 until it's unlocked). Both are hard-blocked, not just warned about.
 
+**A Tang pin's reachability check has a real limitation, and the
+wizard says so.** Before binding, Enable/Add/Rotate all check the
+server is reachable — but that check runs `curl` from this
+already-booted OS's full network stack, which proves nothing about
+whether `clevis-initramfs`'s own network bring-up can reach the same
+server *during the initramfs stage*, before the real OS (and its
+network manager) has even started. That's a separate, still-open
+question (see `docs/future-work.md`) that only an actual reboot can
+answer — a "reachable" result here is a sanity check, not proof the
+binding will actually work at boot.
+
 ## The actions
 
 - **Enable** — first-time setup. Refuses if root isn't LUKS-encrypted,
