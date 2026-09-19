@@ -23,13 +23,18 @@ until it's unlocked). Both are hard-blocked, not just warned about.
 **A Tang pin's reachability check has a real limitation, and the
 wizard says so.** Before binding, Enable/Add/Rotate all check the
 server is reachable — but that check runs `curl` from this
-already-booted OS's full network stack, which proves nothing about
-whether `clevis-initramfs`'s own network bring-up can reach the same
-server *during the initramfs stage*, before the real OS (and its
-network manager) has even started. That's a separate, still-open
-question (see `docs/future-work.md`) that only an actual reboot can
-answer — a "reachable" result here is a sanity check, not proof the
-binding will actually work at boot.
+already-booted OS's full network stack, which on its own proves
+nothing about whether `clevis-initramfs`'s own network bring-up can
+reach the same server *during the initramfs stage*, before the real OS
+(and its network manager) has even started. A "reachable" result here
+is a sanity check, not proof the binding will actually work at boot —
+only an actual reboot proves that. It has now been proven, at least
+for a straightforward single-NIC DHCP LAN (see `docs/future-work.md`
+for the real-hardware test: a Tang-only binding, with TPM2 deliberately
+removed first so nothing could mask the result, survived a real
+reboot without any `ip=` GRUB parameter). A more exotic network setup
+(static IP, VLANs, bonded NICs) hasn't been tested and might still
+need one.
 
 ## The actions
 

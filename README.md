@@ -60,16 +60,22 @@ menu 8, matching the same "never accidentally reachable from the
 general wizard" rule the Danger Zone (11) already follows relative to
 Uninstall (12) — menu 8's device list deliberately excludes root, so
 menu 13 has its own thin add/remove/rotate reusing the same underlying
-`clevis luks bind`/`unbind` primitives. The core TPM2 path is
-real-hardware validated (an actual reboot correctly unlocked root
-automatically, with `systemd-cryptsetup` finding the volume already
-active). Unlike every other binding path in Warden, root's own device
-can never be live test-unlocked to prove a binding works — Warden
-always runs from the very filesystem it would need to unlock a second
-time, so a real reboot is the only proof; every action here says so
-explicitly. See `docs/future-work.md` and the wiki for the full design
-and what's still only unit-tested pending further real-hardware runs
-(Add/Remove/Rotate/Status/Snapshot/Disable, and the LAN-Tang path).
+`clevis luks bind`/`unbind` primitives. Both pin types are now
+real-hardware validated with actual reboots: TPM2 (an actual reboot
+correctly unlocked root automatically, with `systemd-cryptsetup`
+finding the volume already active), and LAN-Tang (bound against a
+genuine cross-host Tang server, then proven conclusively by removing
+the TPM2 binding entirely and rebooting on the Tang binding alone —
+`clevis-initramfs`'s stock DHCP bring-up needs no `ip=` GRUB parameter
+for a straightforward single-NIC DHCP LAN). Unlike every other binding
+path in Warden, root's own device can never be live test-unlocked to
+prove a binding works ahead of time — Warden always runs from the very
+filesystem it would need to unlock a second time, so a real reboot is
+the only proof; every action here says so explicitly. See
+`docs/future-work.md` and the wiki for the full design and what's
+still only unit-tested pending further real-hardware runs (Rotate,
+Status's drift check, Snapshot, Disable, and the same-host-Tang
+refusal).
 
 ## Prerequisites
 

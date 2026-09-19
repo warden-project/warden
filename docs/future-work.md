@@ -15,26 +15,27 @@ accidentally from the general enrolment wizard). This section is now
 the full design; `original-spec.md` remains the source of the original
 constraints it must satisfy.
 
-**Status: all seven actions built and wired in; the core TPM2 path is
-real-hardware validated, the rest is unit-tested only so far.** All of
+**Status: all seven actions built, wired in, and both pin types are
+now real-hardware validated.** All of
 Enable/Add/Remove/Rotate/Status/Snapshot/Disable exist in
 `lib/features/root_unlock.sh`, and menu 13 is now wired into
 `bin/warden`'s main menu (Exit moved to 14) now that the full action
 set is present — matching the "never expose a half-finished menu 13"
-rule this was held back under while only Enable existed. Confirmed on
-the LUKS-root test VM via an actual reboot: `clevis luks bind` for a
-TPM2 pin succeeded following the install→regenerate→bind sequencing
-fix below, and on reboot `systemd-cryptsetup` found the volume
-"already active" by the time the real OS started — meaning the
-initramfs-stage Clevis unlock succeeded before that point, with zero
-manual intervention. This is the single riskiest claim in the whole
-design (a wrong answer here means an unbootable machine), and it now
-has real proof behind it, not just reasoning. Add/Remove/Rotate/
-Status/Snapshot/Disable are still only unit-tested (static
-`declare -f` assertions plus real-primitive tests for the pure
-functions) — none of them have been driven interactively against real
-hardware yet. LAN-Tang's networking-in-initramfs question (below) is
-also still unverified. See "Testing" below for what's left.
+rule this was held back under while only Enable existed. TPM2 was
+confirmed first via an actual reboot: `clevis luks bind` for a TPM2
+pin succeeded following the install→regenerate→bind sequencing fix
+below, and on reboot `systemd-cryptsetup` found the volume "already
+active" by the time the real OS started. LAN-Tang was then confirmed
+independently and conclusively: Add bound a Tang pin (cross-host, at
+the first VM's Tang server), Remove then deleted the TPM2 binding
+entirely so no fallback could mask the result, and a reboot with
+*only* the Tang binding present came up fully automatically — see
+"Resolved: LAN-Tang does not need a GRUB kernel-parameter change"
+below. Both pin types are now equally trusted, not just TPM2. Status,
+Snapshot, and Rotate are still only unit-tested (static `declare -f`
+assertions plus real-primitive tests for the pure functions) — Add and
+Remove are now also real-hardware validated, as above. See "Testing"
+below for what's left.
 
 **A second real bug was found on the very first test run**, more
 fundamental than anything ZFS hit: root's LUKS device is *always*
@@ -287,17 +288,42 @@ text above — deliberately not by silently auto-refreshing on a guess.
   stated scope — but worth a one-line precondition note for anyone
   running an unusual setup where initramfs integrity is enforced.
 
-### Open technical question: does LAN-Tang need a GRUB kernel-parameter change too?
+### Resolved: LAN-Tang does not need a GRUB kernel-parameter change
 
-Tang unlock inside initramfs needs actual networking up before root is
-mounted. `clevis-initramfs` ships some automatic DHCP bring-up, but
-whether that reliably works without an explicit `ip=` kernel
-command-line parameter (which would mean also touching
+**Answered 2026-09-19 by a conclusive real-hardware test.** The
+question was whether `clevis-initramfs`'s automatic DHCP bring-up
+reliably works inside the initramfs without an explicit `ip=` kernel
+command-line parameter (which would have meant also touching
 `GRUB_CMDLINE_LINUX` and running `update-grub` — a step TPM2 never
-needs) isn't resolvable by reasoning alone; it needs testing against
-real hardware. Until verified, treat TPM2 as the definitely-solid path
-and LAN-Tang as "supported, pending that verification" rather than
-equally trusted.
+needs). Tested by using Add to bind a Tang pin (pointed at the first
+VM's Tang server, `192.168.86.41:7591` — a genuine cross-host address)
+alongside the existing TPM2 pin, then using Remove to delete the TPM2
+binding entirely, leaving Tang as the *only* binding on the device —
+removing any possibility of a TPM2 fallback masking the result. On
+reboot, the machine came back up fully automatically: `uptime` showed
+`up 0 min` / a fresh `system boot` timestamp, and `clevis luks list`
+confirmed only the Tang slot existed throughout. No console
+intervention, no passphrase entry. `clevis-initramfs`'s stock DHCP
+bring-up is sufficient on its own, at least for this straightforward
+single-NIC DHCP LAN setup (`enp1s0`, no VLANs, no bonding, no static
+IP requirement) — LAN-Tang for root can now be treated as equally
+solid as TPM2, not merely "supported, pending verification." A static
+IP/VLAN/bonded-NIC setup might still need `ip=`/`update-grub` and
+hasn't been tested — worth a caveat if this is ever revisited for a
+more exotic network topology.
+
+A related false alarm during this same test, worth recording so it
+doesn't cause needless alarm again: after the *first* reboot with both
+TPM2 and Tang bound (before Remove), the VM appeared to hang —
+unreachable for ~8 minutes at both SSH and its previously-known IP.
+It had not hung at all: DHCP had simply handed it a new address on
+reboot (`.144` → `.146`), and polling continued to target the stale
+one. The VM's console the whole time showed a normal login prompt.
+Lesson: don't assume "unreachable at the old IP" means "stuck at a
+LUKS prompt" — check the console, or reconnect via hostname (a
+`ProxyCommand` resolving through the LAN router's own DNS, e.g. `dig
+@<gateway> +short <hostname>`, sidesteps this entirely for future
+testing, since this router happens to register DHCP client hostnames).
 
 ### Testing
 
@@ -320,13 +346,15 @@ point the LUKS-root VM's root-unlock Tang pin at
 `192.168.86.41:7591`.
 
 Validation plan, updated now that all seven actions exist:
-**TPM2-only Enable with a real reboot is done** (see above). Still
-outstanding: the LAN-Tang networking question above; the
-same-host-Tang refusal actually triggering against a Tang instance on
-this VM itself; Add after Enable, confirming it really touches nothing
-under `/boot` (no initramfs regeneration) and that the second binding
-survives a reboot; Remove and Rotate exercised against real slots
-(including Rotate's explicit non-verification warning actually
+**Done**: TPM2-only Enable with a real reboot; the LAN-Tang networking
+question (resolved, see above); Add against a real cross-host Tang
+server, confirming it touches nothing under `/boot` (no initramfs
+regeneration triggered); Remove against a real slot (deleting the TPM2
+binding to force the Tang-only test); and a Tang-only reboot proving
+the new binding actually works, not just that the bind call succeeded.
+Still outstanding: the same-host-Tang refusal actually triggering
+against a Tang instance on this VM itself; Rotate exercised against
+real slots (including its explicit non-verification warning actually
 appearing before old-slot removal is offered); Status's drift check
 against a real kernel update or manual `update-initramfs -u` run, not
 just the synthetic file-content tests already covering the underlying
