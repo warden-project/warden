@@ -15,21 +15,26 @@ accidentally from the general enrolment wizard). This section is now
 the full design; `original-spec.md` remains the source of the original
 constraints it must satisfy.
 
-**Status: in progress, and the core TPM2 path is now real-hardware
-validated.** The safety-check primitives, recovery kit generation, and
-the Enable action are built and tested (`lib/features/root_unlock.sh`),
-though still deliberately unwired from `bin/warden`'s main menu until
-Add/Remove/Rotate/Status/Snapshot/Disable exist too. Confirmed on the
-LUKS-root test VM via an actual reboot: `clevis luks bind` for a TPM2
-pin succeeded following the install→regenerate→bind sequencing fix
-below, and on reboot `systemd-cryptsetup` found the volume "already
-active" by the time the real OS started — meaning the initramfs-stage
-Clevis unlock succeeded before that point, with zero manual
-intervention. This is the single riskiest claim in the whole design
-(a wrong answer here means an unbootable machine), and it now has real
-proof behind it, not just reasoning. LAN-Tang's networking-in-initramfs
-question (below) is still unverified. Remaining actions
-(Add/Remove/Rotate/Status/Snapshot/Disable) are not yet built.
+**Status: all seven actions built and wired in; the core TPM2 path is
+real-hardware validated, the rest is unit-tested only so far.** All of
+Enable/Add/Remove/Rotate/Status/Snapshot/Disable exist in
+`lib/features/root_unlock.sh`, and menu 13 is now wired into
+`bin/warden`'s main menu (Exit moved to 14) now that the full action
+set is present — matching the "never expose a half-finished menu 13"
+rule this was held back under while only Enable existed. Confirmed on
+the LUKS-root test VM via an actual reboot: `clevis luks bind` for a
+TPM2 pin succeeded following the install→regenerate→bind sequencing
+fix below, and on reboot `systemd-cryptsetup` found the volume
+"already active" by the time the real OS started — meaning the
+initramfs-stage Clevis unlock succeeded before that point, with zero
+manual intervention. This is the single riskiest claim in the whole
+design (a wrong answer here means an unbootable machine), and it now
+has real proof behind it, not just reasoning. Add/Remove/Rotate/
+Status/Snapshot/Disable are still only unit-tested (static
+`declare -f` assertions plus real-primitive tests for the pure
+functions) — none of them have been driven interactively against real
+hardware yet. LAN-Tang's networking-in-initramfs question (below) is
+also still unverified. See "Testing" below for what's left.
 
 **A second real bug was found on the very first test run**, more
 fundamental than anything ZFS hit: root's LUKS device is *always*
@@ -108,12 +113,21 @@ low-level primitives, shares zero code path at the menu level).
   `clevis-initramfs` boot script reads bindings live off the LUKS
   header at boot time rather than baking them into the initramfs
   image, **this needs no initramfs regeneration at all** — a
-  meaningfully lower-stakes operation than Enable/Disable. Test-unlocks
-  the new slot specifically before declaring success.
+  meaningfully lower-stakes operation than Enable/Disable. **Cannot
+  test-unlock the new slot before declaring success**, for the same
+  reason Enable can't (below): root's device is always in use while
+  Warden runs. An earlier draft of this design assumed a live
+  test-unlock here, written before that limitation was discovered
+  against real hardware while building Enable — corrected once the
+  same constraint was recognised to apply equally to every action
+  here, not just Enable.
 - **Remove** / **Rotate** — same shape as menu 8's equivalents, same
   hard gate that structurally prevents ever touching a non-Clevis
   (passphrase) slot. No initramfs regeneration needed here either, for
-  the same reason as Add.
+  the same reason as Add. Rotate cannot live-verify the new binding
+  before offering to remove the old one either, for the same reason as
+  Add — its confirmation prompt says so explicitly and recommends a
+  reboot before removing the old slot(s).
 - **Status** — current root binding state, plus a drift check: does
   the on-disk initramfs still match what the latest recovery kit
   backed up (mtime/checksum), or has something regenerated it since
@@ -286,10 +300,20 @@ it's ready as the LAN-Tang test target whenever this gets picked up:
 point the LUKS-root VM's root-unlock Tang pin at
 `192.168.86.41:7591`.
 
-Validation plan: TPM2-only Enable with a real reboot, the LAN-Tang
-networking question above, the same-host-Tang refusal actually
-triggering against a Tang instance on this VM itself, Add after Enable
-requiring no initramfs touch, Disable's full revert sequence, and a
+Validation plan, updated now that all seven actions exist:
+**TPM2-only Enable with a real reboot is done** (see above). Still
+outstanding: the LAN-Tang networking question above; the
+same-host-Tang refusal actually triggering against a Tang instance on
+this VM itself; Add after Enable, confirming it really touches nothing
+under `/boot` (no initramfs regeneration) and that the second binding
+survives a reboot; Remove and Rotate exercised against real slots
+(including Rotate's explicit non-verification warning actually
+appearing before old-slot removal is offered); Status's drift check
+against a real kernel update or manual `update-initramfs -u` run, not
+just the synthetic file-content tests already covering the underlying
+`root_unlock_initramfs_drift_status` logic; Snapshot's on-demand
+refresh; Disable's full revert sequence with a reboot afterward
+confirming the passphrase-only prompt actually returns; and a
 deliberate near-miss (corrupt/replace the initramfs some other way) to
 confirm the backup-and-recover story — including the standalone
 script's own safeguards — actually works, not just the happy path.

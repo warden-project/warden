@@ -1,12 +1,12 @@
 # shellcheck shell=bash
 # lib/features/install.sh — menu 1: component installation
 #
-# clevis-initramfs (root-drive unlock) is deliberately not offered here.
-# It requires its own guided wizard with extra warnings (never remove
-# the original passphrase slot, confirm a recovery path exists first),
-# which does not exist yet. Offering the bare package without that
-# wizard would just invite exactly the kind of manual misuse this tool
-# exists to prevent.
+# clevis-initramfs (root-drive unlock) is deliberately not offered
+# here. It has its own guided wizard with extra warnings (never remove
+# the original passphrase slot, confirm a recovery path exists first)
+# under menu 13, which installs it itself as part of Enable -- offering
+# the bare package here, ahead of that wizard, would just invite
+# exactly the kind of manual misuse menu 13 exists to prevent.
 
 WARDEN_TANG_PKGS=(tang)
 WARDEN_CLEVIS_CORE_PKGS=(clevis clevis-luks clevis-systemd)
@@ -156,8 +156,6 @@ feature_install_menu() {
     if warden_yesno "Optional: Tailscale" "Install Tailscale as well?\n\nLets this host reach (or be reached by) a Tang server over a private tailnet instead of the open network -- relevant whether this host runs Tang, Clevis, or both.\n\nThis only installs the package (adding Tailscale's own apt repository, since it isn't in Ubuntu's default archives). Joining a tailnet ('tailscale up') is a separate, credential-specific step left to you."; then
         install_tailscale=1
     fi
-
-    warden_msg "clevis-initramfs (root-drive unlock)" "Not offered yet: root-drive unlock needs its own guided wizard with extra safeguards, which hasn't been built. If you need this now, it's a manual, guide-only procedure -- see the wiki."
 
     if warden_yesno "Preview first?" "Show what would be installed without actually installing (dry-run)?"; then
         local saved_dry_run="${WARDEN_DRY_RUN}"

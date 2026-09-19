@@ -575,3 +575,418 @@ root_unlock_action_enable() {
     warden_msg "Enable complete" "Root-drive unlock is enabled: clevis luks bind succeeded for the ${pin_type} pin on ${root_dev}.\n\nIMPORTANT: unlike every other binding in Warden, this could NOT be verified with a live test-unlock -- root's own device is always in use while Warden is running, so there is no way to safely test it without an actual reboot. A successful bind here is not the same guarantee menus 4/5/8 give you.\n\nDo not close your only access to this machine until you have rebooted and confirmed it unlocks correctly.\n\nYour recovery kit:\n${WARDEN_ROOT_UNLOCK_BOOT_DIR}/${kit_ts} (guide + script)\n${WARDEN_ROOT_UNLOCK_ROOT_DIR}/${kit_ts} (initramfs backup)\n\nRead the guide there before rebooting."
 }
 
+# root_unlock_action_add — bind an additional pin alongside whatever's
+# already there (e.g. TPM2 now, LAN-Tang added later). Since the
+# clevis-initramfs hook reads bindings live off the LUKS header at
+# boot time rather than baking them into the initramfs image, this
+# needs no initramfs regeneration at all -- a meaningfully
+# lower-stakes operation than Enable/Disable.
+root_unlock_action_add() {
+    if ! is_root_unlock_enabled; then
+        warden_msg "Not enabled yet" "Root-drive unlock isn't enabled on this host yet. Use Enable first."
+        return 0
+    fi
+
+    local root_dev
+    root_dev="$(resolve_root_luks_device)"
+    if [[ -z "$root_dev" ]]; then
+        warden_msg "Root is not LUKS-encrypted" "clevis-initramfs is installed, but this host's root filesystem doesn't currently resolve to a LUKS device -- investigate before continuing."
+        return 0
+    fi
+
+    warden_msg "Current bindings on ${root_dev}" "$(describe_slots "$root_dev")"
+
+    local pin_type
+    pin_type="$(warden_menu "Pin type" "Which unlock method should this new binding use?" \
+        tpm2 "TPM2 chip on this machine (no network needed, most reliable for root)" \
+        tang "A LAN-reachable Tang server (never Tailscale -- cannot work for root)")" || return 0
+
+    local pin_config
+    if [[ "$pin_type" == "tpm2" ]]; then
+        if ! is_tpm2_present; then
+            warden_msg "No TPM2 device found" "Neither /dev/tpm0 nor /dev/tpmrm0 exists on this host. Cannot offer a TPM2 pin here."
+            return 0
+        fi
+        if ! is_pkg_installed clevis-tpm2; then
+            warden_msg "clevis-tpm2 not installed" "A TPM2 chip is present, but the clevis-tpm2 package (which actually implements the tpm2 pin) isn't installed. Install it from menu 1 first."
+            return 0
+        fi
+        pin_config="$(build_tpm2_pin_config)"
+    else
+        local host_port host port url
+        host_port="$(whiptail --inputbox "Tang server address for this new root-unlock pin (host:port).\n\nMust be reachable over plain LAN networking -- a Tailscale-routed address can never work here (tailscaled cannot run before root is mounted), and neither can a Tang server on this same machine (it can't start until root already is)." 14 74 3>&1 1>&2 2>&3)" || return 0
+        IFS=$'\t' read -r host port < <(parse_host_port "$host_port")
+        if is_local_address "$host"; then
+            warden_msg "Refused: same-host Tang" "'${host}' resolves to this machine itself. A Tang server on the SAME host as the root filesystem it's unlocking can never work: Tang runs as a systemd service that can't start until root is already mounted, and root can't mount until it's unlocked. This isn't a reachability problem, it's a bootstrapping deadlock. Point this at a Tang server on a DIFFERENT machine, reachable over plain LAN networking."
+            return 0
+        fi
+        url="http://${host}:${port}"
+        local reach
+        reach="$(check_tang_reachability "$url")"
+        if ! warden_yesno "Tang reachability" "${url}: ${reach}\n\nProceed anyway?"; then
+            return 0
+        fi
+        pin_config="$(build_tang_pin_config "$url")"
+    fi
+
+    local passphrase
+    passphrase="$(whiptail --passwordbox "Enter this device's EXISTING LUKS passphrase, to authorise adding the new Clevis binding:" 12 70 3>&1 1>&2 2>&3)" || return 0
+
+    if warden_yesno "Preview" "This will bind a new ${pin_type} Clevis slot on ${root_dev}, alongside whatever is already bound there. No initramfs changes are needed for this -- the clevis-initramfs hook reads bindings live off the LUKS header at boot. The existing passphrase and any other bindings are never touched.\n\nUnlike a secondary drive, this cannot be test-unlocked live -- root's device is always in use while Warden runs, so an actual reboot is the only real proof the new binding works.\n\nShow this as a dry-run first (no changes made)?"; then
+        local saved_dry_run="${WARDEN_DRY_RUN}"
+        WARDEN_DRY_RUN=1
+        run_clevis_luks_bind "$root_dev" "$passphrase" "$pin_type" "$pin_config" >/dev/null
+        WARDEN_DRY_RUN="$saved_dry_run"
+        if ! warden_yesno "Proceed?" "Proceed with the real change now?"; then
+            return 0
+        fi
+    fi
+
+    if ! run_clevis_luks_bind "$root_dev" "$passphrase" "$pin_type" "$pin_config" >/dev/null; then
+        warden_msg "Bind failed" "clevis luks bind did not succeed. Check the session log at ${WARDEN_LOG_FILE}. Any existing bindings are untouched."
+        return 0
+    fi
+
+    # Deliberately no test_unlock_and_cleanup here -- same reason as
+    # root_unlock_action_enable: root's own device is always already
+    # open/mounted while Warden runs, so a live test-unlock fails
+    # regardless of whether the new binding actually works.
+    warden_msg "Binding added" "New ${pin_type} binding added to ${root_dev}.\n\nIMPORTANT: this could NOT be verified with a live test-unlock, for the same reason as Enable -- root's own device is always in use while Warden is running. Reboot to confirm it actually works before relying on it.\n\nCurrent bindings:\n\n$(describe_slots "$root_dev")"
+}
+
+# root_unlock_action_remove — remove one existing Clevis binding from
+# root. Same hard gate as menu 8 (run_clevis_luks_unbind refuses
+# anything without a Clevis token per cryptsetup's own metadata): the
+# passphrase slot can never be touched through this path. No
+# initramfs regeneration needed, for the same reason as Add.
+root_unlock_action_remove() {
+    if ! is_root_unlock_enabled; then
+        warden_msg "Not enabled yet" "Root-drive unlock isn't enabled on this host yet. Nothing to remove."
+        return 0
+    fi
+
+    local root_dev
+    root_dev="$(resolve_root_luks_device)"
+    if [[ -z "$root_dev" ]]; then
+        warden_msg "Root is not LUKS-encrypted" "clevis-initramfs is installed, but this host's root filesystem doesn't currently resolve to a LUKS device -- investigate before continuing."
+        return 0
+    fi
+
+    local pins
+    pins="$(clevis_pins_for_device "$root_dev")"
+    if [[ -z "$pins" ]]; then
+        warden_msg "Nothing to remove" "${root_dev} has no Clevis bindings."
+        return 0
+    fi
+
+    local -a menu_items=()
+    local slot pintype json total=0
+    while IFS=$'\t' read -r slot pintype json; do
+        [[ -n "$slot" ]] || continue
+        total=$((total + 1))
+        menu_items+=("$slot" "$(describe_binding_slot "$pintype" "$json")")
+    done < <(parse_clevis_slots "$pins")
+
+    slot="$(warden_menu "Select a slot to remove" "Current bindings on ${root_dev}:" "${menu_items[@]}")" || return 0
+
+    local warning="Removing slot ${slot} from ${root_dev}."
+    if [[ "$total" -eq 1 ]]; then
+        warning+="\n\nThis is the ONLY Clevis binding on root -- removing it disables automatic root unlock entirely. The LUKS passphrase prompt at boot still works, but you will need to enter it by hand every time from then on."
+    fi
+    warning+="\n\nDo you have the LUKS passphrase (or another working binding on this device) in hand before continuing?"
+
+    if ! warden_yesno "Confirm removal" "$warning"; then
+        return 0
+    fi
+
+    run_clevis_luks_unbind "$root_dev" "$slot"
+    local unbind_status=$?
+    if [[ "$unbind_status" -eq 3 ]]; then
+        warden_msg "Refused" "Slot ${slot} on ${root_dev} has no Clevis token attached according to cryptsetup's own metadata -- this doesn't match a Clevis binding, so Warden refuses to touch it. This should be unreachable (the list above only ever shows Clevis-bound slots), so if you're seeing this, something is inconsistent -- check the session log at ${WARDEN_LOG_FILE} and investigate before doing anything else with this device."
+        return 0
+    elif [[ "$unbind_status" -ne 0 ]]; then
+        warden_msg "Unbind failed" "clevis luks unbind did not succeed. Check the session log at ${WARDEN_LOG_FILE}."
+        return 0
+    fi
+
+    warden_msg "Binding removed" "Remaining bindings on ${root_dev}:\n\n$(describe_slots "$root_dev")"
+}
+
+# root_unlock_action_rotate — bind a new pin, and only offer to remove
+# the old one(s) once the new one is confirmed added. Cannot
+# test-unlock the new slot live (root's device is always in use while
+# Warden runs), so "confirmed" here means the bind call itself
+# succeeded -- weaker than menu 8's rotate, which does verify with a
+# live test-unlock. This is stated explicitly before the old slot(s)
+# are offered for removal, so nobody removes their only proven-working
+# path based on a false sense of verification.
+root_unlock_action_rotate() {
+    if ! is_root_unlock_enabled; then
+        warden_msg "Not enabled yet" "Root-drive unlock isn't enabled on this host yet. Use Enable first."
+        return 0
+    fi
+
+    local root_dev
+    root_dev="$(resolve_root_luks_device)"
+    if [[ -z "$root_dev" ]]; then
+        warden_msg "Root is not LUKS-encrypted" "clevis-initramfs is installed, but this host's root filesystem doesn't currently resolve to a LUKS device -- investigate before continuing."
+        return 0
+    fi
+
+    warden_msg "Current bindings on ${root_dev}" "$(describe_slots "$root_dev")"
+
+    local pin_type
+    pin_type="$(warden_menu "Pin type" "Which unlock method should the new binding use?" \
+        tpm2 "TPM2 chip on this machine (no network needed, most reliable for root)" \
+        tang "A LAN-reachable Tang server (never Tailscale -- cannot work for root)")" || return 0
+
+    local pin_config
+    if [[ "$pin_type" == "tpm2" ]]; then
+        if ! is_tpm2_present; then
+            warden_msg "No TPM2 device found" "Neither /dev/tpm0 nor /dev/tpmrm0 exists on this host. Cannot offer a TPM2 pin here."
+            return 0
+        fi
+        if ! is_pkg_installed clevis-tpm2; then
+            warden_msg "clevis-tpm2 not installed" "A TPM2 chip is present, but the clevis-tpm2 package (which actually implements the tpm2 pin) isn't installed. Install it from menu 1 first."
+            return 0
+        fi
+        pin_config="$(build_tpm2_pin_config)"
+    else
+        local host_port host port url
+        host_port="$(whiptail --inputbox "Tang server address for the new root-unlock pin (host:port).\n\nMust be reachable over plain LAN networking -- a Tailscale-routed address can never work here (tailscaled cannot run before root is mounted), and neither can a Tang server on this same machine (it can't start until root already is)." 14 74 3>&1 1>&2 2>&3)" || return 0
+        IFS=$'\t' read -r host port < <(parse_host_port "$host_port")
+        if is_local_address "$host"; then
+            warden_msg "Refused: same-host Tang" "'${host}' resolves to this machine itself. A Tang server on the SAME host as the root filesystem it's unlocking can never work: Tang runs as a systemd service that can't start until root is already mounted, and root can't mount until it's unlocked. This isn't a reachability problem, it's a bootstrapping deadlock. Point this at a Tang server on a DIFFERENT machine, reachable over plain LAN networking."
+            return 0
+        fi
+        url="http://${host}:${port}"
+        local reach
+        reach="$(check_tang_reachability "$url")"
+        if ! warden_yesno "Tang reachability" "${url}: ${reach}\n\nProceed anyway?"; then
+            return 0
+        fi
+        pin_config="$(build_tang_pin_config "$url")"
+    fi
+
+    local passphrase
+    passphrase="$(whiptail --passwordbox "Enter this device's EXISTING LUKS passphrase, to authorise adding the new Clevis binding:" 12 70 3>&1 1>&2 2>&3)" || return 0
+
+    if ! warden_yesno "Confirm" "This will:\n\n1. Bind a NEW ${pin_type} slot on ${root_dev}\n2. Only if that bind call succeeds, offer to remove the OLD slot(s)\n\nUnlike menu 8's rotate, step 1 cannot be confirmed with a live test-unlock -- root's device is always in use while Warden runs. \"Succeeds\" here means clevis luks bind exited cleanly, not that a reboot has proven it works. The old binding is never touched if the bind call itself fails.\n\nProceed?"; then
+        return 0
+    fi
+
+    local before after
+    before="$(slot_numbers "$root_dev")"
+
+    if ! run_clevis_luks_bind "$root_dev" "$passphrase" "$pin_type" "$pin_config" >/dev/null; then
+        warden_msg "Bind failed" "clevis luks bind did not succeed. The existing binding(s) are untouched. Check the session log at ${WARDEN_LOG_FILE}."
+        return 0
+    fi
+
+    after="$(slot_numbers "$root_dev")"
+    local new_slot
+    new_slot="$(new_slots "$before" "$after" | head -n1)"
+
+    if [[ -z "$before" ]]; then
+        warden_msg "Rotation complete" "New binding (slot ${new_slot}) was added. There was no previous binding to remove.\n\nThis could NOT be verified with a live test-unlock -- reboot to confirm it actually works."
+        return 0
+    fi
+
+    if ! warden_yesno "New binding added -- NOT live-verified" "The new binding (slot ${new_slot}) was added; clevis luks bind exited cleanly. This is NOT the same as a verified working binding -- root's device cannot be live test-unlocked while Warden runs.\n\nOld slot(s): $(echo "$before" | tr '\n' ' ')\n\nStrongly consider rebooting to confirm the new binding unlocks correctly BEFORE removing the old one(s). Remove the old slot(s) now anyway?"; then
+        warden_msg "Old binding kept" "The new binding was added, but the old slot(s) were left in place at your choice -- reboot first to confirm the new one works, then use this menu's Remove action for the old slot(s) once you're satisfied."
+        return 0
+    fi
+
+    local old_slot refused=""
+    while IFS= read -r old_slot; do
+        [[ -n "$old_slot" ]] || continue
+        run_clevis_luks_unbind "$root_dev" "$old_slot"
+        [[ $? -eq 3 ]] && refused+="${old_slot} "
+    done <<<"$before"
+
+    if [[ -n "$refused" ]]; then
+        warden_msg "Some old slots were refused" "Slot(s) ${refused}had no Clevis token attached according to cryptsetup's own metadata and were left untouched -- this should be unreachable, since these came from the same Clevis-sourced list as the new binding. Check the session log at ${WARDEN_LOG_FILE} and investigate before doing anything else with this device.\n\nRemaining bindings on ${root_dev}:\n\n$(describe_slots "$root_dev")"
+        return 0
+    fi
+
+    warden_msg "Rotation complete -- reboot to verify" "Final bindings on ${root_dev}:\n\n$(describe_slots "$root_dev")\n\nReboot as soon as practical to confirm the new binding actually unlocks root -- this was never live-verified."
+}
+
+# root_unlock_initramfs_drift_status — compares the on-disk initramfs
+# for the running kernel against what the latest recovery kit backed
+# up, so Status can flag when something else (a kernel update, an
+# unrelated update-initramfs run) has regenerated it since. An
+# initramfs content change is exactly the kind of thing that can
+# silently invalidate a PCR-sealed TPM2 binding -- see
+# docs/future-work.md's "Other processes can regenerate initramfs
+# too."
+root_unlock_initramfs_drift_status() {
+    local current latest_link latest_backup
+    current="$(current_initramfs_path)"
+    latest_link="${WARDEN_ROOT_UNLOCK_ROOT_DIR}/latest"
+
+    if [[ ! -f "$current" ]]; then
+        printf 'Current initramfs (%s) not found.\n' "$current"
+        return 0
+    fi
+    if [[ ! -L "$latest_link" && ! -d "$latest_link" ]]; then
+        printf 'No recovery kit exists yet -- run Snapshot to create one.\n'
+        return 0
+    fi
+
+    latest_backup="$(readlink -f "$latest_link" 2>/dev/null)/initrd.img.bak"
+    if [[ ! -f "$latest_backup" ]]; then
+        printf 'Latest recovery kit is missing its initramfs backup -- run Snapshot.\n'
+        return 0
+    fi
+
+    if cmp -s "$current" "$latest_backup"; then
+        printf 'Current initramfs matches the latest recovery kit -- no drift detected.\n'
+    else
+        printf 'DRIFT DETECTED: the current initramfs (%s) no longer matches the latest recovery kit (%s).\n' "$current" "$latest_backup"
+        printf 'Something regenerated it since the last kit was taken (a kernel update, an unrelated update-initramfs run, etc).\n'
+        if is_tpm2_present && clevis_pins_for_device "$(resolve_root_luks_device)" 2>/dev/null | grep -q "tpm2"; then
+            printf 'A TPM2 pin is in use on this device -- an initramfs content change is exactly the kind of thing that can silently invalidate a PCR-sealed binding. Consider running Snapshot now, and verifying the TPM2 binding still unlocks correctly at the next reboot.\n'
+        fi
+        printf 'Run Snapshot to bring the recovery kit up to date with the current initramfs.\n'
+    fi
+}
+
+# root_unlock_action_status — current root binding state plus the
+# drift check above. Read-only, no confirmation needed.
+root_unlock_action_status() {
+    if ! is_root_unlock_enabled; then
+        warden_msg "Root-drive unlock: not enabled" "clevis-initramfs is not installed on this host. Use Enable to set it up."
+        return 0
+    fi
+
+    local root_dev
+    root_dev="$(resolve_root_luks_device)"
+    if [[ -z "$root_dev" ]]; then
+        warden_msg "Root-drive unlock: inconsistent state" "clevis-initramfs is installed, but this host's root filesystem doesn't currently resolve to a LUKS device -- investigate."
+        return 0
+    fi
+
+    local latest_kit=""
+    if [[ -L "${WARDEN_ROOT_UNLOCK_BOOT_DIR}/latest" ]]; then
+        latest_kit="$(readlink "${WARDEN_ROOT_UNLOCK_BOOT_DIR}/latest")"
+    fi
+
+    warden_msg "Root-drive unlock: status" "Root device: ${root_dev}\nclevis-initramfs installed: yes\n\nBindings:\n$(describe_slots "$root_dev")\n\nLatest recovery kit: ${latest_kit:-none}\n\n$(root_unlock_initramfs_drift_status)"
+}
+
+# root_unlock_action_snapshot — manually regenerate the recovery kit
+# (guide + script + fresh initramfs backup) on demand, independent of
+# changing any binding. Exists specifically for the drift scenario
+# above: a stale kit doesn't have to wait for the next Enable/Disable
+# to get refreshed.
+root_unlock_action_snapshot() {
+    if ! is_root_unlock_enabled; then
+        warden_msg "Not enabled yet" "Root-drive unlock isn't enabled on this host yet -- there is nothing to snapshot. Use Enable first."
+        return 0
+    fi
+
+    local initramfs_path
+    initramfs_path="$(current_initramfs_path)"
+
+    if ! warden_yesno "Create a new recovery kit now?" "This backs up the current initramfs (${initramfs_path}) and writes a fresh guide + restore script, independent of any binding change. Older kits beyond the retention count (${WARDEN_ROOT_UNLOCK_RETAIN}) are pruned.\n\nProceed?"; then
+        return 0
+    fi
+
+    local kit_ts
+    kit_ts="$(create_root_unlock_recovery_kit "$initramfs_path")"
+    if [[ -z "$kit_ts" ]]; then
+        warden_msg "Snapshot failed" "Could not create a new recovery kit -- check the session log at ${WARDEN_LOG_FILE} (disk space is the most likely cause)."
+        return 0
+    fi
+
+    warden_msg "Snapshot complete" "New recovery kit created:\n${WARDEN_ROOT_UNLOCK_BOOT_DIR}/${kit_ts} (guide + script)\n${WARDEN_ROOT_UNLOCK_ROOT_DIR}/${kit_ts} (initramfs backup)"
+}
+
+# root_unlock_action_disable — full revert: remove every Clevis
+# binding from root first (back to passphrase-only, same hard gate as
+# Remove), then uninstall clevis-initramfs and regenerate to strip the
+# hook out, with its own backup-first step, same as Enable. Existing
+# recovery kits from earlier enables are left alone, not auto-deleted
+# -- they're the operator's own safety net, matching how menu 12
+# treats everything else non-destructively.
+root_unlock_action_disable() {
+    if ! is_root_unlock_enabled; then
+        warden_msg "Already disabled" "Root-drive unlock is not enabled on this host -- nothing to disable."
+        return 0
+    fi
+
+    local root_dev
+    root_dev="$(resolve_root_luks_device)"
+    if [[ -z "$root_dev" ]]; then
+        warden_msg "Root is not LUKS-encrypted" "clevis-initramfs is installed, but this host's root filesystem doesn't currently resolve to a LUKS device -- investigate before continuing."
+        return 0
+    fi
+
+    local pins
+    pins="$(clevis_pins_for_device "$root_dev")"
+
+    if ! warden_yesno "Disable root-drive unlock" "This will:\n\n1. Remove every Clevis binding from ${root_dev} (back to passphrase-only)\n2. Back up the current initramfs\n3. Uninstall clevis-initramfs and regenerate the initramfs to strip the boot hook out\n\nThe LUKS passphrase is never removed and will keep working throughout and after this. Existing recovery kits from earlier use are left in place.\n\nCurrent bindings:\n$(describe_slots "$root_dev")\n\nProceed?"; then
+        return 0
+    fi
+
+    if [[ -n "$pins" ]]; then
+        local slot pintype json refused=""
+        while IFS=$'\t' read -r slot pintype json; do
+            [[ -n "$slot" ]] || continue
+            run_clevis_luks_unbind "$root_dev" "$slot"
+            [[ $? -eq 3 ]] && refused+="${slot} "
+        done < <(parse_clevis_slots "$pins")
+
+        if [[ -n "$refused" ]]; then
+            warden_msg "Some slots were refused" "Slot(s) ${refused}had no Clevis token attached according to cryptsetup's own metadata and were left untouched -- investigate before continuing. Check the session log at ${WARDEN_LOG_FILE}. The clevis-initramfs package has NOT been removed yet."
+            return 0
+        fi
+    fi
+
+    local initramfs_path
+    initramfs_path="$(current_initramfs_path)"
+    local kit_ts
+    kit_ts="$(create_root_unlock_recovery_kit "$initramfs_path")"
+    if [[ -z "$kit_ts" ]]; then
+        warden_msg "Could not create recovery kit" "Backing up the current initramfs failed -- check the session log at ${WARDEN_LOG_FILE}. All Clevis bindings have already been removed (passphrase-only unlock now works), but refusing to touch the clevis-initramfs package without a fresh backup in place first. Re-run Disable once the disk-space or permissions issue is resolved to finish removing the hook."
+        return 0
+    fi
+
+    ensure_pkg_removed clevis-initramfs
+    if ! run_cmd "regenerate initramfs for $(uname -r)" -- update-initramfs -u -k "$(uname -r)"; then
+        warden_msg "Initramfs regeneration failed after removing clevis-initramfs" "Check the session log at ${WARDEN_LOG_FILE}. All Clevis bindings are already removed and the passphrase-only prompt should still work at boot regardless of this failure. The recovery kit at ${WARDEN_ROOT_UNLOCK_BOOT_DIR}/${kit_ts} has the pre-change initramfs backup if you need it."
+        return 0
+    fi
+
+    warden_msg "Disable complete" "Root-drive unlock has been fully reverted on ${root_dev}: all Clevis bindings removed, clevis-initramfs uninstalled, initramfs regenerated. Boot now prompts for the LUKS passphrase only, exactly as before this feature was ever enabled.\n\nRecovery kits from earlier use were left in place:\n${WARDEN_ROOT_UNLOCK_BOOT_DIR}\n${WARDEN_ROOT_UNLOCK_ROOT_DIR}\n\nDelete them yourself later if you no longer want them."
+}
+
+# feature_root_unlock_menu — menu 13's own action menu. Kept
+# structurally separate from menu 8 (see docs/future-work.md) even
+# though the underlying primitives are shared: menu 8's device list
+# comes from managed_luks_devices, which deliberately excludes root
+# via guard_not_system_critical, so root can never be reached from
+# there by accident.
+feature_root_unlock_menu() {
+    local action
+    action="$(warden_menu "Root-drive unlock" "clevis-initramfs -- automatic root unlock at boot (TPM2 / LAN-only Tang). See menu 1 to install prerequisite packages first if needed." \
+        enable "Enable -- first-time setup" \
+        add "Add -- bind an additional pin" \
+        remove "Remove -- delete an existing binding" \
+        rotate "Rotate -- bind new, then remove old" \
+        status "Status -- current bindings + drift check" \
+        snapshot "Snapshot -- refresh the recovery kit on demand" \
+        disable "Disable -- fully revert to passphrase-only")" || return 0
+
+    case "$action" in
+        enable) root_unlock_action_enable ;;
+        add) root_unlock_action_add ;;
+        remove) root_unlock_action_remove ;;
+        rotate) root_unlock_action_rotate ;;
+        status) root_unlock_action_status ;;
+        snapshot) root_unlock_action_snapshot ;;
+        disable) root_unlock_action_disable ;;
+    esac
+}
+

@@ -15,7 +15,7 @@ native systemd service, that is in scope.
 
 ## Status
 
-**All twelve menu items are implemented.** Core safety primitives
+**All thirteen menu items are implemented.** Core safety primitives
 (logging, dry-run-aware command execution, device/UUID resolution, the
 root/boot/EFI guard, typed confirmation, backup-before-edit) are in
 place and tested throughout: install (1), Tang server config (2), Tang
@@ -52,9 +52,24 @@ reboot-tested throughout; see `docs/future-work.md` for the design
 (including two systemd ordering-cycle dead ends found along the way)
 and the wiki for the incidents it surfaced.
 
-Root-drive unlock (`clevis-initramfs`) remains deliberately deferred,
-to be revisited separately. See the wiki for lessons learned and
-design rationale.
+Root-drive unlock (`clevis-initramfs`, menu 13) — automatic TPM2/
+LAN-Tang unlock of the machine's own root filesystem, not just
+secondary drives — is now built: all seven actions (Enable, Add,
+Remove, Rotate, Status, Snapshot, Disable). Structurally separate from
+menu 8, matching the same "never accidentally reachable from the
+general wizard" rule the Danger Zone (11) already follows relative to
+Uninstall (12) — menu 8's device list deliberately excludes root, so
+menu 13 has its own thin add/remove/rotate reusing the same underlying
+`clevis luks bind`/`unbind` primitives. The core TPM2 path is
+real-hardware validated (an actual reboot correctly unlocked root
+automatically, with `systemd-cryptsetup` finding the volume already
+active). Unlike every other binding path in Warden, root's own device
+can never be live test-unlocked to prove a binding works — Warden
+always runs from the very filesystem it would need to unlock a second
+time, so a real reboot is the only proof; every action here says so
+explicitly. See `docs/future-work.md` and the wiki for the full design
+and what's still only unit-tested pending further real-hardware runs
+(Add/Remove/Rotate/Status/Snapshot/Disable, and the LAN-Tang path).
 
 ## Prerequisites
 

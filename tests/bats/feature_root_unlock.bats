@@ -418,3 +418,217 @@ EOF
     [[ "$body" == *"could NOT be verified with a live test-unlock"* ]]
     [[ "$body" == *"actual reboot is the only real proof"* || "$body" == *"reboot and confirmed"* ]]
 }
+
+# --- Add --------------------------------------------------------------
+
+@test "root_unlock_action_add refuses when root-drive unlock isn't enabled yet" {
+    local body
+    body="$(declare -f root_unlock_action_add)"
+    [[ "$body" == *"is_root_unlock_enabled"* ]]
+    [[ "$body" == *"Not enabled yet"* ]]
+}
+
+@test "root_unlock_action_add shows current bindings before offering the pin menu" {
+    local body before after
+    body="$(declare -f root_unlock_action_add)"
+    before="${body%%Pin type*}"
+    after="${body#*Pin type}"
+    [[ "$before" == *"Current bindings"* ]]
+}
+
+@test "root_unlock_action_add hard-blocks a same-host Tang address, same as Enable" {
+    local body
+    body="$(declare -f root_unlock_action_add)"
+    [[ "$body" == *"is_local_address \"\$host\""* ]]
+    [[ "$body" == *"bootstrapping deadlock"* ]]
+}
+
+@test "root_unlock_action_add checks clevis-tpm2 is installed, not just TPM hardware presence" {
+    local body
+    body="$(declare -f root_unlock_action_add)"
+    [[ "$body" == *"is_tpm2_present"* ]]
+    [[ "$body" == *'is_pkg_installed clevis-tpm2'* ]]
+}
+
+@test "root_unlock_action_add never regenerates the initramfs and never attempts a live test-unlock" {
+    # Add only ever needs run_clevis_luks_bind -- no
+    # install_clevis_initramfs_and_regenerate (the hook already reads
+    # bindings live off the LUKS header), and no test_unlock_and_cleanup
+    # for the same fundamental reason as Enable.
+    local body
+    body="$(declare -f root_unlock_action_add)"
+    [[ "$body" == *"run_clevis_luks_bind"* ]]
+    [[ "$body" != *"install_clevis_initramfs_and_regenerate"* ]]
+    [[ "$body" != *"test_unlock_and_cleanup"* ]]
+    [[ "$body" != *"unbind"* ]]
+}
+
+# --- Remove -------------------------------------------------------------
+
+@test "root_unlock_action_remove refuses when root-drive unlock isn't enabled yet" {
+    local body
+    body="$(declare -f root_unlock_action_remove)"
+    [[ "$body" == *"is_root_unlock_enabled"* ]]
+    [[ "$body" == *"Not enabled yet"* ]]
+}
+
+@test "root_unlock_action_remove only ever unbinds through the hard-gated primitive" {
+    local body
+    body="$(declare -f root_unlock_action_remove)"
+    [[ "$body" == *"run_clevis_luks_unbind"* ]]
+    [[ "$body" != *"luksKillSlot"* ]]
+    [[ "$body" != *"luksRemoveKey"* ]]
+}
+
+@test "root_unlock_action_remove warns explicitly when removing the only remaining binding" {
+    local body
+    body="$(declare -f root_unlock_action_remove)"
+    [[ "$body" == *"ONLY Clevis binding on root"* ]]
+}
+
+# --- Rotate ---------------------------------------------------------------
+
+@test "root_unlock_action_rotate refuses when root-drive unlock isn't enabled yet" {
+    local body
+    body="$(declare -f root_unlock_action_rotate)"
+    [[ "$body" == *"is_root_unlock_enabled"* ]]
+    [[ "$body" == *"Not enabled yet"* ]]
+}
+
+@test "root_unlock_action_rotate never removes the old binding before the new bind call succeeds" {
+    local body bind_idx unbind_idx
+    body="$(declare -f root_unlock_action_rotate)"
+    bind_idx="${body%%run_clevis_luks_bind*}"
+    unbind_idx="${body%%run_clevis_luks_unbind*}"
+    [ "${#bind_idx}" -lt "${#unbind_idx}" ]
+}
+
+@test "root_unlock_action_rotate is explicit that the new binding is not live-verified before offering to remove the old one" {
+    # Unlike menu 8's rotate (which test-unlocks the new slot before
+    # ever offering to remove the old one), root's rotate can't do
+    # that -- root's device is always in use while Warden runs. This
+    # must never be silently glossed over.
+    local body
+    body="$(declare -f root_unlock_action_rotate)"
+    [[ "$body" != *"test_unlock_and_cleanup"* ]]
+    [[ "$body" == *"NOT the same as a verified working binding"* || "$body" == *"cannot be confirmed with a live test-unlock"* ]]
+}
+
+@test "root_unlock_action_rotate hard-blocks a same-host Tang address, same as Enable" {
+    local body
+    body="$(declare -f root_unlock_action_rotate)"
+    [[ "$body" == *"is_local_address \"\$host\""* ]]
+    [[ "$body" == *"bootstrapping deadlock"* ]]
+}
+
+# --- Status / drift check --------------------------------------------------
+
+@test "root_unlock_initramfs_drift_status reports no drift when the current initramfs matches the latest kit" {
+    export WARDEN_ROOT_UNLOCK_ROOT_DIR="${TEST_TMPDIR}/root-kit"
+    mkdir -p "${WARDEN_ROOT_UNLOCK_ROOT_DIR}/20260101T000000Z"
+    local fake_initrd="${TEST_TMPDIR}/initrd.img-fake"
+    echo "same content" > "$fake_initrd"
+    cp "$fake_initrd" "${WARDEN_ROOT_UNLOCK_ROOT_DIR}/20260101T000000Z/initrd.img.bak"
+    ln -sfn "20260101T000000Z" "${WARDEN_ROOT_UNLOCK_ROOT_DIR}/latest"
+    current_initramfs_path() { echo "$fake_initrd"; }
+    export -f current_initramfs_path
+
+    local out
+    out="$(root_unlock_initramfs_drift_status)"
+    [[ "$out" == *"no drift detected"* ]]
+}
+
+@test "root_unlock_initramfs_drift_status reports drift when the current initramfs no longer matches the latest kit" {
+    export WARDEN_ROOT_UNLOCK_ROOT_DIR="${TEST_TMPDIR}/root-kit"
+    mkdir -p "${WARDEN_ROOT_UNLOCK_ROOT_DIR}/20260101T000000Z"
+    echo "old content" > "${WARDEN_ROOT_UNLOCK_ROOT_DIR}/20260101T000000Z/initrd.img.bak"
+    ln -sfn "20260101T000000Z" "${WARDEN_ROOT_UNLOCK_ROOT_DIR}/latest"
+    local fake_initrd="${TEST_TMPDIR}/initrd.img-fake"
+    echo "new content -- something regenerated this" > "$fake_initrd"
+    current_initramfs_path() { echo "$fake_initrd"; }
+    export -f current_initramfs_path
+
+    local out
+    out="$(root_unlock_initramfs_drift_status)"
+    [[ "$out" == *"DRIFT DETECTED"* ]]
+}
+
+@test "root_unlock_initramfs_drift_status reports no kit exists yet when there is none" {
+    export WARDEN_ROOT_UNLOCK_ROOT_DIR="${TEST_TMPDIR}/root-kit-empty"
+    local fake_initrd="${TEST_TMPDIR}/initrd.img-fake2"
+    echo "content" > "$fake_initrd"
+    current_initramfs_path() { echo "$fake_initrd"; }
+    export -f current_initramfs_path
+
+    local out
+    out="$(root_unlock_initramfs_drift_status)"
+    [[ "$out" == *"No recovery kit exists yet"* ]]
+}
+
+@test "root_unlock_action_status is read-only and includes the drift check" {
+    local body
+    body="$(declare -f root_unlock_action_status)"
+    [[ "$body" == *"root_unlock_initramfs_drift_status"* ]]
+    [[ "$body" != *"run_cmd"* ]]
+    [[ "$body" != *"run_clevis_luks_bind"* ]]
+    [[ "$body" != *"run_clevis_luks_unbind"* ]]
+}
+
+# --- Snapshot ---------------------------------------------------------------
+
+@test "root_unlock_action_snapshot refuses when root-drive unlock isn't enabled yet" {
+    local body
+    body="$(declare -f root_unlock_action_snapshot)"
+    [[ "$body" == *"is_root_unlock_enabled"* ]]
+    [[ "$body" == *"Not enabled yet"* ]]
+}
+
+@test "root_unlock_action_snapshot creates a recovery kit independent of any binding change" {
+    local body
+    body="$(declare -f root_unlock_action_snapshot)"
+    [[ "$body" == *"create_root_unlock_recovery_kit"* ]]
+    [[ "$body" != *"run_clevis_luks_bind"* ]]
+    [[ "$body" != *"run_clevis_luks_unbind"* ]]
+}
+
+# --- Disable ----------------------------------------------------------------
+
+@test "root_unlock_action_disable is a no-op when already disabled" {
+    local body
+    body="$(declare -f root_unlock_action_disable)"
+    [[ "$body" == *"is_root_unlock_enabled"* ]]
+    [[ "$body" == *"Already disabled"* ]]
+}
+
+@test "root_unlock_action_disable removes every binding before touching the clevis-initramfs package" {
+    local body unbind_idx remove_pkg_idx
+    body="$(declare -f root_unlock_action_disable)"
+    unbind_idx="${body%%run_clevis_luks_unbind*}"
+    remove_pkg_idx="${body%%ensure_pkg_removed*}"
+    [ "${#unbind_idx}" -lt "${#remove_pkg_idx}" ]
+}
+
+@test "root_unlock_action_disable backs up the initramfs before removing the package" {
+    local body backup_idx remove_pkg_idx
+    body="$(declare -f root_unlock_action_disable)"
+    backup_idx="${body%%create_root_unlock_recovery_kit*}"
+    remove_pkg_idx="${body%%ensure_pkg_removed*}"
+    [ "${#backup_idx}" -lt "${#remove_pkg_idx}" ]
+}
+
+@test "root_unlock_action_disable never removes existing recovery kits" {
+    local body
+    body="$(declare -f root_unlock_action_disable)"
+    [[ "$body" != *"rm -rf \${WARDEN_ROOT_UNLOCK"* ]]
+    [[ "$body" != *"rm -rf \"\${WARDEN_ROOT_UNLOCK"* ]]
+}
+
+# --- Menu wiring --------------------------------------------------------
+
+@test "feature_root_unlock_menu offers all seven actions" {
+    local body
+    body="$(declare -f feature_root_unlock_menu)"
+    for action in root_unlock_action_enable root_unlock_action_add root_unlock_action_remove root_unlock_action_rotate root_unlock_action_status root_unlock_action_snapshot root_unlock_action_disable; do
+        [[ "$body" == *"$action"* ]]
+    done
+}
