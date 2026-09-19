@@ -207,15 +207,22 @@ text above — deliberately not by silently auto-refreshing on a guess.
 
 ### Preconditions to check, not assume
 
-- **GRUB already has cryptodisk support configured**
-  (`GRUB_ENABLE_CRYPTODISK=y`, existing `cryptomount` entries
-  referencing this root's UUID) — should already be true if root was
-  encrypted via the installer, but Warden should verify this directly
-  rather than assume it, and refuse cleanly if it isn't. Root-unlock
-  only adds a Clevis keyslot and an initramfs hook; it never touches
-  GRUB configuration itself, so if GRUB can't already get into the
-  initramfs stage against an encrypted volume, nothing here will fix
-  that.
+- **`/boot` is its own separate, unencrypted partition** — confirmed
+  against a real Ubuntu 24.04 encrypted install (`vda2` → plain
+  `ext4` → `/boot`, entirely separate from `vda3`'s `crypto_LUKS`):
+  this is Ubuntu's default layout, and it means GRUB never needs to
+  decrypt anything itself — it reads the kernel/initrd straight off
+  plain `/boot`, and all decryption happens later, inside the already-
+  loaded initramfs. An earlier version of this design assumed GRUB
+  needed `GRUB_ENABLE_CRYPTODISK=y` configured and treated that as the
+  precondition to check; that's wrong for the standard layout and
+  would have made Warden refuse a perfectly normal installation.
+  `cryptodisk` support is only relevant for the less common case where
+  `/boot` itself lives inside the encrypted volume. The actual
+  precondition to check is simpler: confirm `/boot` is a separate
+  mount from `/` (as it normally is) — and only in the unusual case
+  where it *isn't* would `GRUB_ENABLE_CRYPTODISK`/`cryptomount`
+  configuration need verifying at all.
 - **TPM2 device actually present** (`/dev/tpm0` or `/dev/tpmrm0`)
   before offering the TPM2 pin option at all.
 - **Secure Boot / Unified Kernel Image caveat** (lower priority): a
@@ -239,19 +246,25 @@ equally trusted.
 
 ### Testing
 
-Needs a *second* disposable VM, since the existing one has a plain
+Needed a *second* disposable VM, since the first one has a plain
 (non-LUKS) root by deliberate original design (root-unlock was out of
-scope when it was built) and can't be converted in place. Built via
-Ubuntu's installer with "encrypt this installation" checked, OVMF-TPM
-BIOS (same as the existing VM, so the emulated TPM2 is available).
-Validation plan once built: TPM2-only Enable with a real reboot, the
-LAN-Tang networking question above, the same-host-Tang refusal
-actually triggering against a Tang instance on the VM itself, Add
-after Enable requiring no initramfs touch, Disable's full revert
-sequence, and a deliberate near-miss (corrupt/replace the initramfs
-some other way) to confirm the backup-and-recover story — including
-the standalone script's own safeguards — actually works, not just the
-happy path.
+scope when it was built) and can't be converted in place. Built and
+confirmed 2026-09-19: Ubuntu 24.04 LTS, OVMF-TPM BIOS, LUKS-encrypted
+root via the installer's "encrypt this installation" option — `vda3`
+→ `crypto_LUKS` → LVM → ext4 root, `/dev/tpm0`/`/dev/tpmrm0` both
+present, `/boot` correctly separate/unencrypted (see the precondition
+correction above, found from checking this real install directly).
+LAN-reachable from the same network as the first VM, so LAN-Tang
+testing can point at the first VM's already-running Tang server for a
+genuine cross-host case.
+
+Validation plan: TPM2-only Enable with a real reboot, the LAN-Tang
+networking question above, the same-host-Tang refusal actually
+triggering against a Tang instance on this VM itself, Add after Enable
+requiring no initramfs touch, Disable's full revert sequence, and a
+deliberate near-miss (corrupt/replace the initramfs some other way) to
+confirm the backup-and-recover story — including the standalone
+script's own safeguards — actually works, not just the happy path.
 
 ## ZFS pool/dataset support
 
