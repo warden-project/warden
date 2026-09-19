@@ -49,6 +49,24 @@ successful exit is the only automated signal available, and Enable's
 completion message says so explicitly, making clear this is a weaker
 guarantee than every other binding path in Warden gives.
 
+**A third real bug was found live, the moment Status was first run
+against the real Enable from the run above**: it reported DRIFT
+DETECTED immediately, and permanently — every single time, forever,
+not just when something external actually changed the initramfs. Root
+cause: the drift check compared the current initramfs directly against
+the recovery kit's own backup file, but that backup is deliberately
+the *pre-change* image (captured before `install_clevis_initramfs_and_
+regenerate` runs, so it can be used to revert), which by definition
+never matches the initramfs again once that regeneration has actually
+happened. Confirmed on the real VM: the backup taken at bind time was
+76.5MB (before `clevis-initramfs` was installed); the live initramfs
+immediately after was 83.9MB (clevis's own hooks/binaries baked in) —
+different content forever, by design, with nothing wrong at all. Fixed
+by decoupling the two: a separate `last-known-good.sha256` reference
+file, written only once whatever action actually finished changing the
+initramfs (Enable, Snapshot), is what Status now compares against —
+never the kit's own necessarily-different backup content.
+
 ### Scope decisions
 
 - **Root must already be LUKS-encrypted** (via Ubuntu's installer, at
@@ -129,17 +147,18 @@ low-level primitives, shares zero code path at the menu level).
   Add — its confirmation prompt says so explicitly and recommends a
   reboot before removing the old slot(s).
 - **Status** — current root binding state, plus a drift check: does
-  the on-disk initramfs still match what the latest recovery kit
-  backed up (mtime/checksum), or has something regenerated it since
-  (see "Other processes can regenerate initramfs too" below). If a
-  TPM2 pin is in use and drift is detected, says so explicitly — an
-  initramfs content change is exactly the kind of thing that can
-  silently invalidate a PCR-sealed TPM2 binding.
+  the on-disk initramfs still match a recorded "last known good"
+  checksum, or has something regenerated it since (see "Other
+  processes can regenerate initramfs too" below). If a TPM2 pin is in
+  use and drift is detected, says so explicitly — an initramfs content
+  change is exactly the kind of thing that can silently invalidate a
+  PCR-sealed TPM2 binding. **Not** compared against the recovery kit's
+  own backup file directly — see the real bug this caused, below.
 - **Snapshot** — manually regenerate the recovery kit (guide + script
-  + fresh initramfs backup) on demand, independent of changing
-  anything else. Exists specifically for the drift scenario: a stale
-  kit doesn't have to wait for the next actual Enable/Disable to get
-  refreshed.
+  + fresh initramfs backup) *and* the drift-check reference, on
+  demand, independent of changing anything else. Exists specifically
+  for the drift scenario: a stale kit/reference doesn't have to wait
+  for the next actual Enable/Disable to get refreshed.
 - **Disable** — full revert, not just a package removal: remove every
   Clevis binding from root first (reverting to passphrase-only, same
   hard gate as Remove), *then* uninstall `clevis-initramfs` and

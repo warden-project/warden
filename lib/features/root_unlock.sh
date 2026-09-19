@@ -572,6 +572,8 @@ root_unlock_action_enable() {
     # cannot unmount a running system's own root filesystem to test it.
     # clevis luks bind's own successful exit is the only automated
     # signal available here -- a real reboot is the only actual proof.
+    record_initramfs_reference "$initramfs_path"
+
     warden_msg "Enable complete" "Root-drive unlock is enabled: clevis luks bind succeeded for the ${pin_type} pin on ${root_dev}.\n\nIMPORTANT: unlike every other binding in Warden, this could NOT be verified with a live test-unlock -- root's own device is always in use while Warden is running, so there is no way to safely test it without an actual reboot. A successful bind here is not the same guarantee menus 4/5/8 give you.\n\nDo not close your only access to this machine until you have rebooted and confirmed it unlocks correctly.\n\nYour recovery kit:\n${WARDEN_ROOT_UNLOCK_BOOT_DIR}/${kit_ts} (guide + script)\n${WARDEN_ROOT_UNLOCK_ROOT_DIR}/${kit_ts} (initramfs backup)\n\nRead the guide there before rebooting."
 }
 
@@ -812,43 +814,73 @@ root_unlock_action_rotate() {
     warden_msg "Rotation complete -- reboot to verify" "Final bindings on ${root_dev}:\n\n$(describe_slots "$root_dev")\n\nReboot as soon as practical to confirm the new binding actually unlocks root -- this was never live-verified."
 }
 
+# root_unlock_reference_file — path to the recorded "last known good"
+# initramfs checksum, used by the drift check below.
+#
+# Deliberately NOT the recovery kit's own backup file: a kit's backup
+# is always the *pre-change* image (needed to revert Enable/Disable),
+# which by definition never matches the initramfs immediately after
+# the action that created it actually finishes -- comparing drift
+# against it would make Status report DRIFT DETECTED permanently after
+# every single successful Enable, which isn't drift at all, just
+# Warden's own expected change. Found live, on the very first real
+# Status check run right after a real Enable. This file instead always
+# reflects the initramfs exactly as Warden itself last left it.
+root_unlock_reference_file() {
+    printf '%s/last-known-good.sha256' "${WARDEN_ROOT_UNLOCK_ROOT_DIR}"
+}
+
+# record_initramfs_reference <path> — records <path>'s checksum as the
+# current known-good state. Called once whatever action just changed
+# the initramfs (Enable, Snapshot) has finished, never as part of
+# create_root_unlock_recovery_kit itself, since that runs against the
+# pre-change file in Enable/Disable's sequencing.
+record_initramfs_reference() {
+    local path="$1" file
+    file="$(root_unlock_reference_file)"
+
+    if [[ "${WARDEN_DRY_RUN}" == "1" ]]; then
+        log_line "[DRY-RUN] would record ${path}'s checksum as the current known-good initramfs state"
+        return 0
+    fi
+
+    mkdir -p "$(dirname "$file")"
+    sha256sum "$path" 2>/dev/null | awk '{print $1}' > "$file"
+}
+
 # root_unlock_initramfs_drift_status — compares the on-disk initramfs
-# for the running kernel against what the latest recovery kit backed
-# up, so Status can flag when something else (a kernel update, an
-# unrelated update-initramfs run) has regenerated it since. An
-# initramfs content change is exactly the kind of thing that can
-# silently invalidate a PCR-sealed TPM2 binding -- see
-# docs/future-work.md's "Other processes can regenerate initramfs
-# too."
+# for the running kernel against the last-recorded known-good state, so
+# Status can flag when something else (a kernel update, an unrelated
+# update-initramfs run) has regenerated it since. An initramfs content
+# change is exactly the kind of thing that can silently invalidate a
+# PCR-sealed TPM2 binding -- see docs/future-work.md's "Other processes
+# can regenerate initramfs too."
 root_unlock_initramfs_drift_status() {
-    local current latest_link latest_backup
+    local current ref_file recorded current_hash
     current="$(current_initramfs_path)"
-    latest_link="${WARDEN_ROOT_UNLOCK_ROOT_DIR}/latest"
+    ref_file="$(root_unlock_reference_file)"
 
     if [[ ! -f "$current" ]]; then
         printf 'Current initramfs (%s) not found.\n' "$current"
         return 0
     fi
-    if [[ ! -L "$latest_link" && ! -d "$latest_link" ]]; then
-        printf 'No recovery kit exists yet -- run Snapshot to create one.\n'
+    if [[ ! -f "$ref_file" ]]; then
+        printf 'No reference recorded yet -- run Snapshot to create one.\n'
         return 0
     fi
 
-    latest_backup="$(readlink -f "$latest_link" 2>/dev/null)/initrd.img.bak"
-    if [[ ! -f "$latest_backup" ]]; then
-        printf 'Latest recovery kit is missing its initramfs backup -- run Snapshot.\n'
-        return 0
-    fi
+    recorded="$(cat "$ref_file" 2>/dev/null)"
+    current_hash="$(sha256sum "$current" 2>/dev/null | awk '{print $1}')"
 
-    if cmp -s "$current" "$latest_backup"; then
-        printf 'Current initramfs matches the latest recovery kit -- no drift detected.\n'
+    if [[ -n "$current_hash" && "$current_hash" == "$recorded" ]]; then
+        printf 'Current initramfs matches the last recorded state -- no drift detected.\n'
     else
-        printf 'DRIFT DETECTED: the current initramfs (%s) no longer matches the latest recovery kit (%s).\n' "$current" "$latest_backup"
-        printf 'Something regenerated it since the last kit was taken (a kernel update, an unrelated update-initramfs run, etc).\n'
+        printf 'DRIFT DETECTED: the current initramfs (%s) no longer matches the state Warden last recorded.\n' "$current"
+        printf 'Something regenerated it since (a kernel update, an unrelated update-initramfs run, etc).\n'
         if is_tpm2_present && clevis_pins_for_device "$(resolve_root_luks_device)" 2>/dev/null | grep -q "tpm2"; then
             printf 'A TPM2 pin is in use on this device -- an initramfs content change is exactly the kind of thing that can silently invalidate a PCR-sealed binding. Consider running Snapshot now, and verifying the TPM2 binding still unlocks correctly at the next reboot.\n'
         fi
-        printf 'Run Snapshot to bring the recovery kit up to date with the current initramfs.\n'
+        printf 'Run Snapshot to bring the recovery kit and reference up to date with the current initramfs.\n'
     fi
 }
 
@@ -900,7 +932,9 @@ root_unlock_action_snapshot() {
         return 0
     fi
 
-    warden_msg "Snapshot complete" "New recovery kit created:\n${WARDEN_ROOT_UNLOCK_BOOT_DIR}/${kit_ts} (guide + script)\n${WARDEN_ROOT_UNLOCK_ROOT_DIR}/${kit_ts} (initramfs backup)"
+    record_initramfs_reference "$initramfs_path"
+
+    warden_msg "Snapshot complete" "New recovery kit created:\n${WARDEN_ROOT_UNLOCK_BOOT_DIR}/${kit_ts} (guide + script)\n${WARDEN_ROOT_UNLOCK_ROOT_DIR}/${kit_ts} (initramfs backup)\n\nStatus's drift check is now up to date with this state."
 }
 
 # root_unlock_action_disable — full revert: remove every Clevis

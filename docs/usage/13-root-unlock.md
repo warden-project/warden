@@ -43,14 +43,21 @@ until it's unlocked). Both are hard-blocked, not just warned about.
 - **Rotate** — bind a new pin first, and only offer to remove the old
   one(s) once the bind call itself has succeeded.
 - **Status** — current bindings, plus a drift check: does the on-disk
-  initramfs still match what the latest recovery kit backed up? If
-  something else regenerated it since (a kernel update, an unrelated
+  initramfs still match the checksum Warden last recorded right after
+  Enable or Snapshot actually finished changing it? If something else
+  regenerated it since (a kernel update, an unrelated
   `update-initramfs -u` run) and a TPM2 pin is in use, says so
   explicitly — an initramfs content change is exactly the kind of
-  thing that can silently invalidate a PCR-sealed TPM2 binding.
+  thing that can silently invalidate a PCR-sealed TPM2 binding. This
+  is deliberately *not* a comparison against the recovery kit's own
+  backup file — that backup is always the image from just *before* the
+  change, so it would never match and would report drift permanently,
+  even with nothing wrong.
 - **Snapshot** — manually refresh the recovery kit (guide + script +
-  fresh initramfs backup) on demand, independent of any binding
-  change. Use this if Status reports drift.
+  fresh initramfs backup) *and* the drift-check reference above, on
+  demand, independent of any binding change. Use this if Status
+  reports drift and you've confirmed it's expected (e.g. after a
+  kernel update you triggered yourself).
 - **Disable** — full revert: removes every Clevis binding from root
   first (back to passphrase-only), *then* uninstalls
   `clevis-initramfs` and regenerates the initramfs to strip the hook

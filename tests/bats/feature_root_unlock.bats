@@ -523,37 +523,61 @@ EOF
 
 # --- Status / drift check --------------------------------------------------
 
-@test "root_unlock_initramfs_drift_status reports no drift when the current initramfs matches the latest kit" {
+@test "record_initramfs_reference then drift_status reports no drift for the same file" {
     export WARDEN_ROOT_UNLOCK_ROOT_DIR="${TEST_TMPDIR}/root-kit"
-    mkdir -p "${WARDEN_ROOT_UNLOCK_ROOT_DIR}/20260101T000000Z"
     local fake_initrd="${TEST_TMPDIR}/initrd.img-fake"
     echo "same content" > "$fake_initrd"
-    cp "$fake_initrd" "${WARDEN_ROOT_UNLOCK_ROOT_DIR}/20260101T000000Z/initrd.img.bak"
-    ln -sfn "20260101T000000Z" "${WARDEN_ROOT_UNLOCK_ROOT_DIR}/latest"
     current_initramfs_path() { echo "$fake_initrd"; }
     export -f current_initramfs_path
+
+    record_initramfs_reference "$fake_initrd"
 
     local out
     out="$(root_unlock_initramfs_drift_status)"
     [[ "$out" == *"no drift detected"* ]]
 }
 
-@test "root_unlock_initramfs_drift_status reports drift when the current initramfs no longer matches the latest kit" {
+@test "root_unlock_initramfs_drift_status reports drift when the current initramfs no longer matches the recorded reference" {
     export WARDEN_ROOT_UNLOCK_ROOT_DIR="${TEST_TMPDIR}/root-kit"
-    mkdir -p "${WARDEN_ROOT_UNLOCK_ROOT_DIR}/20260101T000000Z"
-    echo "old content" > "${WARDEN_ROOT_UNLOCK_ROOT_DIR}/20260101T000000Z/initrd.img.bak"
-    ln -sfn "20260101T000000Z" "${WARDEN_ROOT_UNLOCK_ROOT_DIR}/latest"
     local fake_initrd="${TEST_TMPDIR}/initrd.img-fake"
-    echo "new content -- something regenerated this" > "$fake_initrd"
+    echo "content as it was when last recorded" > "$fake_initrd"
     current_initramfs_path() { echo "$fake_initrd"; }
     export -f current_initramfs_path
+    record_initramfs_reference "$fake_initrd"
+
+    echo "new content -- something regenerated this" > "$fake_initrd"
 
     local out
     out="$(root_unlock_initramfs_drift_status)"
     [[ "$out" == *"DRIFT DETECTED"* ]]
 }
 
-@test "root_unlock_initramfs_drift_status reports no kit exists yet when there is none" {
+@test "a recovery kit's own pre-change backup never matching the post-change initramfs is not reported as drift" {
+    # Regression test for a real bug found live: right after a real
+    # Enable, Status previously reported DRIFT DETECTED permanently,
+    # because the drift check compared against the recovery kit's own
+    # backup file -- which is deliberately the PRE-change image (needed
+    # to revert), and so can never match the initramfs once
+    # install_clevis_initramfs_and_regenerate has actually run. The fix
+    # is a separate reference file, recorded only after the action that
+    # changed the initramfs finishes, decoupled from the kit backup.
+    export WARDEN_ROOT_UNLOCK_ROOT_DIR="${TEST_TMPDIR}/root-kit"
+    mkdir -p "${WARDEN_ROOT_UNLOCK_ROOT_DIR}/20260101T000000Z"
+    echo "pre-change content" > "${WARDEN_ROOT_UNLOCK_ROOT_DIR}/20260101T000000Z/initrd.img.bak"
+    ln -sfn "20260101T000000Z" "${WARDEN_ROOT_UNLOCK_ROOT_DIR}/latest"
+
+    local fake_initrd="${TEST_TMPDIR}/initrd.img-fake"
+    echo "post-change content, as Warden itself just left it" > "$fake_initrd"
+    current_initramfs_path() { echo "$fake_initrd"; }
+    export -f current_initramfs_path
+    record_initramfs_reference "$fake_initrd"
+
+    local out
+    out="$(root_unlock_initramfs_drift_status)"
+    [[ "$out" == *"no drift detected"* ]]
+}
+
+@test "root_unlock_initramfs_drift_status reports no reference recorded yet when there is none" {
     export WARDEN_ROOT_UNLOCK_ROOT_DIR="${TEST_TMPDIR}/root-kit-empty"
     local fake_initrd="${TEST_TMPDIR}/initrd.img-fake2"
     echo "content" > "$fake_initrd"
@@ -562,7 +586,7 @@ EOF
 
     local out
     out="$(root_unlock_initramfs_drift_status)"
-    [[ "$out" == *"No recovery kit exists yet"* ]]
+    [[ "$out" == *"No reference recorded yet"* ]]
 }
 
 @test "root_unlock_action_status is read-only and includes the drift check" {
@@ -589,6 +613,22 @@ EOF
     [[ "$body" == *"create_root_unlock_recovery_kit"* ]]
     [[ "$body" != *"run_clevis_luks_bind"* ]]
     [[ "$body" != *"run_clevis_luks_unbind"* ]]
+}
+
+@test "root_unlock_action_snapshot updates the drift-check reference, not just the kit" {
+    local body
+    body="$(declare -f root_unlock_action_snapshot)"
+    [[ "$body" == *"record_initramfs_reference"* ]]
+}
+
+@test "root_unlock_action_enable records the drift-check reference only after a successful bind" {
+    local body bind_idx record_idx real_section
+    body="$(declare -f root_unlock_action_enable)"
+    [[ "$body" == *"record_initramfs_reference"* ]]
+    real_section="${body#*Proceed with the real changes now?}"
+    bind_idx="${real_section%%run_clevis_luks_bind*}"
+    record_idx="${real_section%%record_initramfs_reference*}"
+    [ "${#bind_idx}" -lt "${#record_idx}" ]
 }
 
 # --- Disable ----------------------------------------------------------------
