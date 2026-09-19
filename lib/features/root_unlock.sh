@@ -455,3 +455,114 @@ print("\n".join(urls))
     return 1
 }
 
+# --- Menu 13 actions -----------------------------------------------------
+#
+# Deliberately not wired into bin/warden's main menu until the full
+# action set (Enable/Add/Remove/Rotate/Status/Snapshot/Disable) is
+# built and tested -- never expose a half-finished menu 13.
+
+# root_unlock_action_enable — first-time setup.
+root_unlock_action_enable() {
+    if is_root_unlock_enabled; then
+        warden_msg "Already enabled" "Root-drive unlock is already configured on this host. Use Add to bind an additional pin, or Rotate to replace the existing one."
+        return 0
+    fi
+
+    local root_dev
+    root_dev="$(resolve_root_luks_device)"
+    if [[ -z "$root_dev" ]]; then
+        warden_msg "Root is not LUKS-encrypted" "This feature enrols Clevis onto an existing LUKS-encrypted root filesystem -- it does not encrypt an unencrypted root in place. This system's root does not appear to be LUKS-encrypted, so there is nothing to enable here."
+        return 0
+    fi
+
+    if ! is_boot_separate_from_root; then
+        warden_msg "Unusual boot layout" "This system's /boot does not appear to be a separate partition from root -- it may live inside the encrypted volume itself. That's a less common layout this feature has not been verified against (GRUB would need cryptodisk support already configured, which Warden does not set up). Refusing to proceed automatically -- investigate your GRUB configuration manually first if you want to continue."
+        return 0
+    fi
+
+    local root_uuid
+    root_uuid="$(uuid_for_device "$root_dev")"
+
+    if ! warden_yesno "Root device" "Root filesystem is backed by: ${root_dev}\nUUID: ${root_uuid}\n\nThis is the device root-drive unlock will apply to.\n\nProceed?"; then
+        return 0
+    fi
+
+    if ! warden_yesno "Recovery media check" "Do you have bootable recovery/rescue media for THIS machine ready right now (e.g. a live Ubuntu USB/ISO)?\n\nIf not, stop here and prepare one before continuing -- this changes how the machine boots, and rescue media is the way back in if something goes wrong." ; then
+        warden_msg "Cancelled" "Prepare recovery media first, then come back to this menu. No changes were made."
+        return 0
+    fi
+
+    local pin_type
+    pin_type="$(warden_menu "Pin type" "Which unlock method should root use?" \
+        tpm2 "TPM2 chip on this machine (no network needed, most reliable for root)" \
+        tang "A LAN-reachable Tang server (never Tailscale -- cannot work for root)")" || return 0
+
+    local pin_config
+    if [[ "$pin_type" == "tpm2" ]]; then
+        if ! is_tpm2_present; then
+            warden_msg "No TPM2 device found" "Neither /dev/tpm0 nor /dev/tpmrm0 exists on this host. Cannot offer a TPM2 pin here."
+            return 0
+        fi
+        pin_config="$(build_tpm2_pin_config)"
+    else
+        local host_port host port url
+        host_port="$(whiptail --inputbox "Tang server address for root unlock (host:port).\n\nMust be reachable over plain LAN networking -- a Tailscale-routed address can never work here (tailscaled cannot run before root is mounted), and neither can a Tang server on this same machine (it can't start until root already is)." 14 74 3>&1 1>&2 2>&3)" || return 0
+        IFS=$'\t' read -r host port < <(parse_host_port "$host_port")
+        if is_local_address "$host"; then
+            warden_msg "Refused: same-host Tang" "'${host}' resolves to this machine itself. A Tang server on the SAME host as the root filesystem it's unlocking can never work: Tang runs as a systemd service that can't start until root is already mounted, and root can't mount until it's unlocked. This isn't a reachability problem, it's a bootstrapping deadlock. Point this at a Tang server on a DIFFERENT machine, reachable over plain LAN networking."
+            return 0
+        fi
+        url="http://${host}:${port}"
+        local reach
+        reach="$(check_tang_reachability "$url")"
+        if ! warden_yesno "Tang reachability" "${url}: ${reach}\n\nProceed anyway?"; then
+            return 0
+        fi
+        pin_config="$(build_tang_pin_config "$url")"
+    fi
+
+    local passphrase
+    passphrase="$(whiptail --passwordbox "Enter this device's EXISTING LUKS passphrase, to authorise adding the new Clevis binding:" 12 70 3>&1 1>&2 2>&3)" || return 0
+
+    local initramfs_path
+    initramfs_path="$(current_initramfs_path)"
+
+    if warden_yesno "Preview" "This will:\n\n1. Back up the current initramfs (${initramfs_path})\n2. Install clevis-initramfs and regenerate the initramfs for kernel $(uname -r)\n3. Bind Clevis to ${root_dev} using the ${pin_type} pin\n4. Test-unlock the new binding\n\nThe existing LUKS passphrase is never touched or removed.\n\nShow this as a dry-run first (no changes made)?"; then
+        local saved_dry_run="${WARDEN_DRY_RUN}"
+        WARDEN_DRY_RUN=1
+        create_root_unlock_recovery_kit "$initramfs_path" >/dev/null
+        install_clevis_initramfs_and_regenerate
+        run_clevis_luks_bind "$root_dev" "$passphrase" "$pin_type" "$pin_config" >/dev/null
+        WARDEN_DRY_RUN="$saved_dry_run"
+        if ! warden_yesno "Proceed?" "Proceed with the real changes now?"; then
+            return 0
+        fi
+    fi
+
+    local kit_ts
+    kit_ts="$(create_root_unlock_recovery_kit "$initramfs_path")"
+    if [[ -z "$kit_ts" ]]; then
+        warden_msg "Could not create recovery kit" "Backing up the current initramfs failed -- check the session log at ${WARDEN_LOG_FILE}. Refusing to proceed without a backup in place first."
+        return 0
+    fi
+
+    if ! install_clevis_initramfs_and_regenerate; then
+        warden_msg "Initramfs regeneration failed" "Check the session log at ${WARDEN_LOG_FILE}. The recovery kit at ${WARDEN_ROOT_UNLOCK_BOOT_DIR}/${kit_ts} still has the pre-change backup if you need it."
+        return 0
+    fi
+
+    if ! run_clevis_luks_bind "$root_dev" "$passphrase" "$pin_type" "$pin_config" >/dev/null; then
+        warden_msg "Bind failed" "clevis luks bind did not succeed. Check the session log at ${WARDEN_LOG_FILE}. The initramfs hook is installed, but no Clevis binding was added -- the passphrase is still the only way to unlock this device."
+        return 0
+    fi
+
+    local unlock_result
+    unlock_result="$(test_unlock_and_cleanup "$root_dev")"
+
+    if [[ "$unlock_result" == "ok" ]]; then
+        warden_msg "Enable complete" "Root-drive unlock is enabled and the new binding verified successfully.\n\nIMPORTANT: this only proves the Clevis binding itself works -- it does NOT prove the initramfs boot-time path works. Only an actual reboot proves that.\n\nDo not close your only access to this machine until you have rebooted and confirmed it unlocks correctly.\n\nYour recovery kit:\n${WARDEN_ROOT_UNLOCK_BOOT_DIR}/${kit_ts} (guide + script)\n${WARDEN_ROOT_UNLOCK_ROOT_DIR}/${kit_ts} (initramfs backup)\n\nRead the guide there before rebooting."
+    else
+        warden_msg "Bind succeeded, but test-unlock failed" "The Clevis binding was added, but test-unlock did not succeed. Check Tang reachability (if using Tang) and the session log at ${WARDEN_LOG_FILE} before rebooting. Your recovery kit is still at ${WARDEN_ROOT_UNLOCK_BOOT_DIR}/${kit_ts} if needed."
+    fi
+}
+

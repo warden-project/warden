@@ -320,3 +320,77 @@ EOF
     [ "$(find "$WARDEN_ROOT_UNLOCK_BOOT_DIR" -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 2 ]
     [ "$(find "$WARDEN_ROOT_UNLOCK_ROOT_DIR" -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 2 ]
 }
+
+@test "root_unlock_action_enable refuses to redo setup once already enabled" {
+    local body
+    body="$(declare -f root_unlock_action_enable)"
+    [[ "$body" == *"is_root_unlock_enabled"* ]]
+}
+
+@test "root_unlock_action_enable refuses a root that isn't LUKS-encrypted" {
+    local body
+    body="$(declare -f root_unlock_action_enable)"
+    [[ "$body" == *"resolve_root_luks_device"* ]]
+}
+
+@test "root_unlock_action_enable checks the boot-layout precondition" {
+    local body
+    body="$(declare -f root_unlock_action_enable)"
+    [[ "$body" == *"is_boot_separate_from_root"* ]]
+}
+
+@test "root_unlock_action_enable requires the recovery-media confirmation before the pin menu" {
+    local body before after
+    body="$(declare -f root_unlock_action_enable)"
+    [[ "$body" == *"Recovery media check"* ]]
+    before="${body%%Recovery media check*}"
+    after="${body#*Recovery media check}"
+    [[ "$before" != *"Pin type"* ]]
+    [[ "$after" == *"Pin type"* ]]
+}
+
+@test "root_unlock_action_enable checks TPM2 presence before offering the tpm2 pin" {
+    local body
+    body="$(declare -f root_unlock_action_enable)"
+    [[ "$body" == *"is_tpm2_present"* ]]
+}
+
+@test "root_unlock_action_enable hard-blocks a same-host Tang address" {
+    local body
+    body="$(declare -f root_unlock_action_enable)"
+    [[ "$body" == *"is_local_address \"\$host\""* ]]
+    [[ "$body" == *"bootstrapping deadlock"* ]]
+}
+
+@test "root_unlock_action_enable sequences backup, then regenerate, then bind -- never bind first" {
+    # The must-fix ordering detail from docs/future-work.md: binding
+    # before regenerating risks the regeneration immediately
+    # invalidating a TPM2 seal it just created. Confirms the real
+    # (non-preview) calls appear in the right order in the function
+    # body, not just that all three are present somewhere.
+    local body real_section backup_idx regen_idx bind_idx
+    body="$(declare -f root_unlock_action_enable)"
+    # Skip past the dry-run preview block (which also calls all three,
+    # deliberately) by looking only at what follows it.
+    real_section="${body#*Proceed with the real changes now?}"
+    backup_idx="${real_section%%create_root_unlock_recovery_kit*}"
+    regen_idx="${real_section%%install_clevis_initramfs_and_regenerate*}"
+    bind_idx="${real_section%%run_clevis_luks_bind*}"
+    [ "${#backup_idx}" -lt "${#regen_idx}" ]
+    [ "${#regen_idx}" -lt "${#bind_idx}" ]
+}
+
+@test "root_unlock_action_enable never removes the existing passphrase -- only ever calls bind, never unbind" {
+    local body
+    body="$(declare -f root_unlock_action_enable)"
+    [[ "$body" == *"run_clevis_luks_bind"* ]]
+    [[ "$body" != *"unbind"* ]]
+    [[ "$body" != *"luksKillSlot"* ]]
+    [[ "$body" != *"luksRemoveKey"* ]]
+}
+
+@test "root_unlock_action_enable warns that test-unlock success doesn't prove the initramfs path works" {
+    local body
+    body="$(declare -f root_unlock_action_enable)"
+    [[ "$body" == *"does NOT prove the initramfs boot-time path works"* ]]
+}
