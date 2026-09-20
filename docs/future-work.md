@@ -640,24 +640,29 @@ decided above.
 
 ## A single health-check / self-test action
 
-Raised 2026-09-20, not yet scoped. Checking whether everything Warden
-has configured is actually still healthy currently means visiting
-several menus by hand: menu 7 for binding/mount state, menu 13's
-Status for root-unlock drift, and there's no single place that
-re-verifies Tang reachability for every *configured* binding at once
-(menu 7 only shows reachability for servers a currently-bound device
-already references) or confirms a TPM2 chip is still present and the
-right packages are still installed.
+Raised 2026-09-20. **Status: done**, same day — small enough that it
+didn't warrant sitting on the backlog. Checking whether everything
+Warden has configured was actually still healthy used to mean
+visiting several menus by hand: menu 7 for binding/mount state, menu
+13's Status for root-unlock drift, with no single place re-verifying
+Tang reachability for every *configured* binding at once (menu 7 only
+ever showed reachability for servers a currently-bound device already
+referenced) or confirming a TPM2 chip was still present with the right
+packages installed.
 
-The idea: one action (`warden check`, or a new menu item) that walks
-every managed device and configured binding and reports pass/fail for
-each — Tang servers reachable, TPM2 hardware present where a tpm2 pin
-is bound, ZFS import units still enabled where expected, root-unlock's
-drift check — and exits non-zero if anything needs attention, so it
-can be run unattended (a cron job, a monitoring check) rather than
-only ever read interactively. Would need a non-interactive/quiet
-output mode to be genuinely cron-friendly, which ties into the
-scriptable-mode idea below rather than being fully separate from it.
+Implemented as `lib/features/health_check.sh` (menu 14, plus
+`warden check` non-interactively): walks every managed device and
+configured binding and reports PASS/FAIL/WARN for Tang reachability,
+TPM2 hardware/package presence (only checked if some binding actually
+uses a tpm2 pin), ZFS import units, the late-boot unlocker path, and
+root-unlock drift (a WARN, not a FAIL — drift alone never invalidates
+a binding). One render function backs both front ends, so there's only
+one implementation to keep correct. Deliberately composition, not new
+logic — every individual check reuses a primitive menu 7 or menu 13
+already had and already tested. No separate quiet mode was added: the
+exit code (0 clean, 1 needs attention) is the actionable signal for a
+cron job or monitoring check; the full text is there for when you need
+to see why.
 
 ## Off-host sync for root-unlock recovery kits
 

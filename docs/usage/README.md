@@ -16,3 +16,4 @@ top-level README for the current phase status.
 - [11-danger-zone-erase.md](11-danger-zone-erase.md) — menu 11
 - [12-uninstall.md](12-uninstall.md) — menu 12
 - [13-root-unlock.md](13-root-unlock.md) — menu 13
+- [14-health-check.md](14-health-check.md) — menu 14

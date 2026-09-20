@@ -35,6 +35,7 @@ warden_test_setup() {
     source "${WARDEN_ROOT}/lib/features/tang_rotate.sh"
     source "${WARDEN_ROOT}/lib/features/danger_erase.sh"
     source "${WARDEN_ROOT}/lib/features/uninstall.sh"
+    source "${WARDEN_ROOT}/lib/features/health_check.sh"
 
     log_init
 }

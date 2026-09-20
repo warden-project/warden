@@ -56,6 +56,8 @@ source "${WARDEN_ROOT}/lib/features/tang_rotate.sh"
 source "${WARDEN_ROOT}/lib/features/danger_erase.sh"
 # shellcheck source=lib/features/uninstall.sh
 source "${WARDEN_ROOT}/lib/features/uninstall.sh"
+# shellcheck source=lib/features/health_check.sh
+source "${WARDEN_ROOT}/lib/features/health_check.sh"
 
 if [[ "${EUID}" -ne 0 ]]; then
     echo "warden: must be run as root (e.g. sudo warden). Refusing to elevate per-command." >&2
@@ -64,12 +66,22 @@ fi
 
 log_init
 
+# `warden check` — the same health check menu 14 shows, printed
+# non-interactively instead of via whiptail, for cron/monitoring use.
+# Exit status is the report's own: 0 if everything passed, 1 if
+# anything needs attention. No separate quiet mode -- capture stdout
+# and act on the exit code, same as any other cron job.
+if [[ "${1:-}" == "check" ]]; then
+    render_health_check_report
+    exit $?
+fi
+
 MENU_TEXT="Day 0 / Day 1 / Maintenance / Danger Zone -- select an option:"
 
 main_menu_loop() {
     local choice
     while true; do
-        choice="$(whiptail --title "Warden -- NBDE Management" --cancel-button "Exit" --menu "$MENU_TEXT" 24 78 16 \
+        choice="$(whiptail --title "Warden -- NBDE Management" --cancel-button "Exit" --menu "$MENU_TEXT" 24 78 17 \
             1 "Install components (Tang / Clevis / both)" \
             2 "Configure Tang server" \
             3 "Tang servers to trust (bindings)" \
@@ -83,7 +95,8 @@ main_menu_loop() {
             11 "DANGER ZONE: Erase LUKS header" \
             12 "Uninstall / revert" \
             13 "Root-drive unlock" \
-            14 "Exit" \
+            14 "Health check" \
+            15 "Exit" \
             3>&1 1>&2 2>&3)" || exit 0
 
         case "$choice" in
@@ -100,7 +113,8 @@ main_menu_loop() {
             12) feature_uninstall_menu ;;
             7) feature_status_dashboard ;;
             13) feature_root_unlock_menu ;;
-            14) exit 0 ;;
+            14) feature_health_check_menu ;;
+            15) exit 0 ;;
             *) warden_msg "Not yet implemented" "Menu item ${choice} is not yet implemented yet." ;;
         esac
     done

@@ -60,6 +60,9 @@ during development, not adopted as abstract best practice:
   binding, LUKS header backup, Tang server key rotation, uninstall, and
   a structurally separate Danger Zone for cryptographic erase — kept
   entirely unreachable from the normal wizards by design.
+- **Health check** — one pass/fail check across everything else above,
+  interactively or non-interactively (`warden check`, cron-friendly:
+  exits non-zero if anything needs attention).
 
 Every one of the above has been driven interactively against real
 Ubuntu Server hardware with real reboots, not just exercised through
