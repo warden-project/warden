@@ -2,82 +2,87 @@
 
 Warden is a menu-driven TUI for managing Network-Bound Disk Encryption
 (NBDE) on Ubuntu Server hosts: installing and configuring Tang and
-Clevis, binding LUKS-encrypted drives to Tang servers (including over
-Tailscale), and handling the ongoing lifecycle — key rotation, header
-backups, uninstall, and secure disposal.
+Clevis, binding LUKS-encrypted drives (including the root filesystem
+itself) to Tang servers or a TPM2 chip, and handling the ongoing
+lifecycle — key rotation, header backups, uninstall, and secure
+disposal.
+
+## Philosophy
+
+A few rules this project holds itself to, learned from real incidents
+during development, not adopted as abstract best practice:
+
+- **Safety first, always.** This tool edits disk encryption
+  configuration and, in one deliberate path, can permanently destroy
+  data. Every wizard supports a dry-run preview, every destructive
+  action requires a typed confirmation bound to the specific device on
+  screen (never a plain y/n), and nothing is ever assumed reversible
+  unless it demonstrably is.
+- **Check, don't assume.** Device names are re-resolved by UUID before
+  every use, never trusted from a previous step. Package installs and
+  systemd unit state are verified, not assumed to have succeeded.
+  Reachability is tested, not inferred. Several real bugs in this
+  project existed specifically because an assumption — about a path, a
+  device state, a config default — went unchecked; see the wiki's
+  Lessons Learned page for the actual incidents.
+- **Prove it on real hardware, not just in a test suite.** The bats
+  suite runs against loop-device-backed images and catches most
+  regressions cheaply, but it cannot catch everything a real reboot
+  can. Every menu in this project has been driven interactively
+  against real Ubuntu Server hardware — real `tang`/`clevis`/
+  `cryptsetup`/`systemd`, real reboots — specifically because a rootless
+  dev sandbox and a real boot sequence do not always agree, and the
+  gap between them is exactly where the interesting bugs live.
+- **Stay auditable.** Bash and whiptail, not a larger framework: every
+  action needs to stay readable and traceable line-by-line rather than
+  hidden behind abstraction, and every mutating command routes through
+  one logging chokepoint so a session can always be reconstructed
+  after the fact.
+
+## Features
+
+- **Install & configure** — Tang, Clevis, TPM2 support, ZFS, and
+  Tailscale, each offered as an independent, optional component; never
+  installed unless asked for.
+- **Enrol & unlock secondary drives** — format a new LUKS device or
+  enrol an existing one, bind it to a Tang server (including over
+  Tailscale), a TPM2 chip, or a Shamir's Secret Sharing threshold
+  across multiple servers.
+- **Root-drive unlock** — the same automatic unlock for the machine's
+  *own* root filesystem, not just secondary drives, via TPM2 and/or a
+  LAN-only Tang server — with its own machine-specific recovery kit
+  (a guide and a self-contained restore script) generated before any
+  change is made, and never removing the original passphrase.
+- **ZFS pool support** — a LUKS-encrypted device can hold a single-disk
+  ZFS pool instead of a plain filesystem, auto-imported and mounted on
+  unlock with no `/etc/fstab` entry needed.
+- **Ongoing lifecycle** — a live status dashboard, add/remove/rotate a
+  binding, LUKS header backup, Tang server key rotation, uninstall, and
+  a structurally separate Danger Zone for cryptographic erase — kept
+  entirely unreachable from the normal wizards by design.
+
+Every one of the above has been driven interactively against real
+Ubuntu Server hardware with real reboots, not just exercised through
+the automated test suite — see the wiki's Lessons Learned page for
+what that testing actually found and fixed along the way.
+
+## Screenshots
+
+<!-- markdownlint-disable MD033 -->
+<p align="center">
+  <img src="docs/images/main-menu.png" alt="Warden's main menu" width="640">
+</p>
+<p align="center">
+  <img src="docs/images/root-unlock-menu.png" alt="Warden's root-drive unlock menu" width="640">
+</p>
+<!-- markdownlint-enable MD033 -->
 
 ## Scope
 
-Ubuntu Server hosts only. The Tang server running as a Docker container
-on a separate Unraid NAS is out of scope and is managed through
-Unraid's own Docker UI. Where an Ubuntu host runs Tang itself as a
-native systemd service, that is in scope.
-
-## Status
-
-**All thirteen menu items are implemented.** Core safety primitives
-(logging, dry-run-aware command execution, device/UUID resolution, the
-root/boot/EFI guard, typed confirmation, backup-before-edit) are in
-place and tested throughout: install (1), Tang server config (2), Tang
-bindings/SSS/Tailscale (3), the LUKS setup wizard (4), the LUKS
-enrolment wizard (5), the late-boot unlocker (6), the status dashboard
-(7), add/remove/rotate a binding (8), LUKS header backup (9), Tang
-server key rotation (10), the Danger Zone's cryptographic erase (11),
-and uninstall/revert (12).
-
-Menus 4, 5, and 11 route through the same
-`confirm_destructive_device_action` guard (lsblk display, root/boot/efi
-refusal with override, typed confirmation) built in Phase 0 — 11 wraps
-it in the Danger Zone's distinct visual banner and is the single most
-irreversible action in the tool. Menu 8's rotate action follows the
-same bind-verify-then-unbind sequencing; menu 12's device-unbind action
-shares the same hard non-Clevis-slot gate as menu 8, so neither can
-touch a bare passphrase or keyfile slot. Menu 12 shares zero code path
-with menu 11 — verified by grep, not just convention — so uninstalling
-can never reach the erase flow.
-
-All twelve menus have also been driven interactively end-to-end
-against real Ubuntu 24.04 hardware (real `tang`/`clevis`/`cryptsetup`/
-`systemd`, not just the bats suite's loop-device stand-ins) — that pass
-found and fixed several real bugs invisible in a rootless dev sandbox,
-including a root/boot/EFI guard gap that missed a whole-disk device
-and a Danger Zone erase leaving a boot-hang hazard behind. See the
-wiki's Lessons Learned page for the full list.
-
-Menus 1, 4, and 5 also support single-disk ZFS pools as an alternative
-to a plain filesystem — creating a new one, or detecting and
-re-enrolling an existing one — with menu 7 (status) and menus 11/12
-(erase/uninstall) aware of the boot-time import unit this needs. Real
-reboot-tested throughout; see `docs/future-work.md` for the design
-(including two systemd ordering-cycle dead ends found along the way)
-and the wiki for the incidents it surfaced.
-
-Root-drive unlock (`clevis-initramfs`, menu 13) — automatic TPM2/
-LAN-Tang unlock of the machine's own root filesystem, not just
-secondary drives — is now built: all seven actions (Enable, Add,
-Remove, Rotate, Status, Snapshot, Disable). Structurally separate from
-menu 8, matching the same "never accidentally reachable from the
-general wizard" rule the Danger Zone (11) already follows relative to
-Uninstall (12) — menu 8's device list deliberately excludes root, so
-menu 13 has its own thin add/remove/rotate reusing the same underlying
-`clevis luks bind`/`unbind` primitives. Both pin types are now
-real-hardware validated with actual reboots: TPM2 (an actual reboot
-correctly unlocked root automatically, with `systemd-cryptsetup`
-finding the volume already active), and LAN-Tang (bound against a
-genuine cross-host Tang server, then proven conclusively by removing
-the TPM2 binding entirely and rebooting on the Tang binding alone —
-`clevis-initramfs`'s stock DHCP bring-up needs no `ip=` GRUB parameter
-for a straightforward single-NIC DHCP LAN). Unlike every other binding
-path in Warden, root's own device can never be live test-unlocked to
-prove a binding works ahead of time — Warden always runs from the very
-filesystem it would need to unlock a second time, so a real reboot is
-the only proof; every action here says so explicitly. **All seven
-actions are now real-hardware validated**, including Disable's full
-revert followed by an actual reboot back to a plain passphrase prompt,
-and the same-host-Tang refusal triggering live against a genuinely
-running Tang server on the test VM itself. See `docs/future-work.md`
-and the wiki for the full design and the four real bugs found and
-fixed along the way.
+Ubuntu Server hosts only. A Tang server running elsewhere (e.g. as a
+Docker container on a separate NAS) is managed through that platform's
+own tooling and is out of scope — where an Ubuntu host runs Tang
+itself as a native systemd service, that *is* in scope.
 
 ## Prerequisites
 
@@ -104,10 +109,9 @@ rather than hidden behind abstraction.
 bin/warden          entrypoint: root check, sourcing, main menu loop
 lib/core/           safety primitives — see "Safety model" below
 lib/tui/            whiptail wrappers
-lib/features/       one file per menu item (added as each phase lands)
+lib/features/       one file per menu item
 tests/bats/         test suite, run against loop-device-backed images
 docs/               usage docs per menu path
-wiki/               mirrors the Forgejo wiki
 ```
 
 Every mutating command in every feature routes through
@@ -117,8 +121,8 @@ each wizard has to remember to implement.
 
 ## Safety model
 
-These requirements are non-negotiable, and two of them exist because of
-real incidents, not hypothetical caution:
+These requirements are non-negotiable, and several of them exist
+because of real incidents, not hypothetical caution:
 
 - **State is checked before every action.** Running Warden twice, or
   interrupting it (Ctrl-C, power loss, reboot) and running it again,
@@ -154,9 +158,14 @@ real incidents, not hypothetical caution:
   missed on install, silently breaking late-boot unlock — every
   required package is checked explicitly and individually, never
   assumed to ride in with a related one.
+- **Root-drive unlock can never be reached by accident.** Menu 13 is
+  structurally separate from the general enrolment/binding menus —
+  the same isolation the Danger Zone already has from Uninstall — and
+  always keeps the original LUKS passphrase working, with a
+  machine-specific recovery kit generated before any change is made.
 
-See the wiki's "Lessons learned" page for the full background on both
-incidents.
+See the wiki's "Lessons learned" page for the full background on each
+real incident referenced above.
 
 ## Testing
 
@@ -169,22 +178,22 @@ bats tests/bats/
 
 Some tests require root (anything that actually formats a loop device
 or reloads systemd units) and are skipped otherwise. CI only runs
-`shellcheck` — the one Forgejo runner available is this shared dev host
-itself, not an ephemeral/containerized one, so it isn't a safe place to
-install packages or run the bats suite (real loop devices, real
-`cryptsetup`) against. Run `bats tests/bats/` as root locally, or on a
-dedicated disposable test VM, to exercise the root-gated tests for
-real.
+`shellcheck` — the available runner is a shared, non-ephemeral host,
+not a safe place to install packages or run the bats suite (real loop
+devices, real `cryptsetup`) against. Run `bats tests/bats/` as root
+locally, or on a dedicated disposable test VM, to exercise the
+root-gated tests for real.
 
 ## Documentation
 
-Menu-path usage docs live in `docs/usage/`. The Forgejo wiki covers how
-NBDE works in this setup, troubleshooting/FAQ, and lessons learned.
+Menu-path usage docs live in `docs/usage/`. The
+[wiki](https://github.com/warden-project/warden/wiki) covers how NBDE
+works in this setup, troubleshooting/FAQ, and lessons learned.
 Documentation is part of the definition of done for any change, not a
 follow-up. The original design spec this project was built from is
 kept at `docs/original-spec.md` for reference. Ideas raised but not
-yet scoped or scheduled (e.g. ZFS pool/dataset support) are tracked in
-`docs/future-work.md` so they don't get lost.
+yet scoped or scheduled (e.g. multi-drive ZFS mirrors/raidz) are
+tracked in `docs/future-work.md` so they don't get lost.
 
 ## License
 
