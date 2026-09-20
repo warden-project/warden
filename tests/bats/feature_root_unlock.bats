@@ -591,6 +591,30 @@ EOF
     [[ "$out" == *"no drift detected"* ]]
 }
 
+@test "build_tpm2_pin_config never sets pcr_bank/pcr_ids -- Warden's tpm2 bindings are never PCR-sealed" {
+    # Confirmed live by decoding a real bound JWE token on the LUKS-root
+    # test VM: the protected header contained only {"hash":"sha256",
+    # "key":"ecc"} under clevis.tpm2 -- no pcr_bank or pcr_ids anywhere.
+    # This means an initramfs content change (a kernel update, a manual
+    # update-initramfs -u run) can never invalidate a Warden-created
+    # tpm2 binding, since there is no PCR policy tying it to measured
+    # boot state at all. The drift check must never claim otherwise.
+    local out
+    out="$(build_tpm2_pin_config)"
+    [[ "$out" != *"pcr"* ]]
+}
+
+@test "root_unlock_initramfs_drift_status never claims drift could invalidate a TPM2 binding" {
+    # Regression test: an earlier version of this message warned that
+    # drift could "silently invalidate a PCR-sealed binding" when a
+    # tpm2 pin was in use. False for Warden's own bindings -- see the
+    # build_tpm2_pin_config test above -- and has been removed.
+    local body
+    body="$(declare -f root_unlock_initramfs_drift_status)"
+    [[ "$body" != *"PCR-sealed"* ]]
+    [[ "$body" != *"invalidate"* ]]
+}
+
 @test "root_unlock_initramfs_drift_status reports no reference recorded yet when there is none" {
     export WARDEN_ROOT_UNLOCK_ROOT_DIR="${TEST_TMPDIR}/root-kit-empty"
     local fake_initrd="${TEST_TMPDIR}/initrd.img-fake2"

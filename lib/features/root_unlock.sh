@@ -851,10 +851,12 @@ record_initramfs_reference() {
 # root_unlock_initramfs_drift_status — compares the on-disk initramfs
 # for the running kernel against the last-recorded known-good state, so
 # Status can flag when something else (a kernel update, an unrelated
-# update-initramfs run) has regenerated it since. An initramfs content
-# change is exactly the kind of thing that can silently invalidate a
-# PCR-sealed TPM2 binding -- see docs/future-work.md's "Other processes
-# can regenerate initramfs too."
+# update-initramfs run) has regenerated it since -- see
+# docs/future-work.md's "Other processes can regenerate initramfs
+# too." Does NOT warn that this could invalidate a TPM2 binding:
+# confirmed by decoding a real bound token that build_tpm2_pin_config's
+# `{}` config never sets pcr_bank/pcr_ids, so Warden's tpm2 bindings
+# are never PCR-sealed against initramfs content in the first place.
 root_unlock_initramfs_drift_status() {
     local current ref_file recorded current_hash
     current="$(current_initramfs_path)"
@@ -876,10 +878,7 @@ root_unlock_initramfs_drift_status() {
         printf 'Current initramfs matches the last recorded state -- no drift detected.\n'
     else
         printf 'DRIFT DETECTED: the current initramfs (%s) no longer matches the state Warden last recorded.\n' "$current"
-        printf 'Something regenerated it since (a kernel update, an unrelated update-initramfs run, etc).\n'
-        if is_tpm2_present && clevis_pins_for_device "$(resolve_root_luks_device)" 2>/dev/null | grep -q "tpm2"; then
-            printf 'A TPM2 pin is in use on this device -- an initramfs content change is exactly the kind of thing that can silently invalidate a PCR-sealed binding. Consider running Snapshot now, and verifying the TPM2 binding still unlocks correctly at the next reboot.\n'
-        fi
+        printf 'Something regenerated it since (a kernel update, an unrelated update-initramfs run, etc). This does not affect any Clevis binding -- Warden never PCR-seals its tpm2 pin -- it just means the recovery kit is stale.\n'
         printf 'Run Snapshot to bring the recovery kit and reference up to date with the current initramfs.\n'
     fi
 }

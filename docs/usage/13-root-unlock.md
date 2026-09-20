@@ -62,13 +62,14 @@ need one.
   initramfs still match the checksum Warden last recorded right after
   Enable or Snapshot actually finished changing it? If something else
   regenerated it since (a kernel update, an unrelated
-  `update-initramfs -u` run) and a TPM2 pin is in use, says so
-  explicitly — an initramfs content change is exactly the kind of
-  thing that can silently invalidate a PCR-sealed TPM2 binding. This
-  is deliberately *not* a comparison against the recovery kit's own
-  backup file — that backup is always the image from just *before* the
-  change, so it would never match and would report drift permanently,
-  even with nothing wrong.
+  `update-initramfs -u` run), says so — this just means the recovery
+  kit is stale, not that any binding is at risk: Warden's tpm2 pin
+  config (`{}`, no `pcr_bank`/`pcr_ids`) is never PCR-sealed, confirmed
+  by decoding a real bound token, so an initramfs content change alone
+  can't invalidate it. This is deliberately *not* a comparison against
+  the recovery kit's own backup file — that backup is always the image
+  from just *before* the change, so it would never match and would
+  report drift permanently, even with nothing wrong.
 - **Snapshot** — manually refresh the recovery kit (guide + script +
   fresh initramfs backup) *and* the drift-check reference above, on
   demand, independent of any binding change. Use this if Status
