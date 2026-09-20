@@ -185,3 +185,8 @@ follow-up. The original design spec this project was built from is
 kept at `docs/original-spec.md` for reference. Ideas raised but not
 yet scoped or scheduled (e.g. ZFS pool/dataset support) are tracked in
 `docs/future-work.md` so they don't get lost.
+
+## License
+
+Licensed under the GNU Affero General Public License v3.0 or later —
+see [`LICENSE`](LICENSE).
