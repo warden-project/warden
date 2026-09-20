@@ -28,3 +28,28 @@ teardown() { warden_test_teardown; }
     run run_cmd "bad call" touch "${TEST_TMPDIR}/marker"
     [ "$status" -eq 2 ]
 }
+
+@test "run_cmd always redirects the command's stdin from /dev/null, even when run_cmd itself has a live stdin" {
+    # Regression test for a real hang found live: bin/warden normally
+    # runs attached to a live interactive terminal (whiptail needs
+    # one), and without this, any subprocess run_cmd invokes inherits
+    # that same live terminal as its own stdin. `clevis luks unbind`
+    # for a tang-pinned slot hung indefinitely this way -- something in
+    # its call chain attempts a stdin read that blocks forever waiting
+    # for a keypress nobody will ever type, but returns instantly with
+    # a harmless notice when stdin is already closed/EOF, as it always
+    # should be for a command Warden runs on its own behalf. Uses `cat`
+    # as a stand-in for whatever in the real toolchain reads stdin: if
+    # run_cmd's own stdin leaked through, cat would echo it back.
+    run bash -c "
+echo 'this must never reach cat' | {
+    source '${WARDEN_ROOT}/lib/core/log.sh'
+    source '${WARDEN_ROOT}/lib/core/exec.sh'
+    WARDEN_LOG_DIR='${WARDEN_LOG_DIR}'
+    log_init
+    run_cmd 'cat' -- cat
+}
+"
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"this must never reach cat"* ]]
+}

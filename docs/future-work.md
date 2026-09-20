@@ -344,6 +344,28 @@ LUKS prompt" — check the console, or reconnect via hostname (a
 @<gateway> +short <hostname>`, sidesteps this entirely for future
 testing, since this router happens to register DHCP client hostnames).
 
+**A fourth real bug, found while testing Disable, turned out to be in
+`run_cmd` itself, not in root-unlock's own code — and affects every
+mutating command in the whole tool, not just this feature.** Disable's
+`clevis luks unbind` call for the tang slot hung indefinitely every
+time it was run interactively (via a live whiptail session, whether
+through `tmux` or a persistent `ssh -tt` + `pexpect` session), but
+completed instantly when the exact same command was run directly over
+a plain non-interactive SSH command. Root cause: `run_cmd` never
+redirected the invoked command's stdin, so it always inherited
+`bin/warden`'s own live, interactive terminal (whiptail requires one).
+Something in `clevis luks unbind`'s call chain for a tang-pinned slot
+attempts a stdin read — harmless and near-instant when stdin is
+already closed/EOF (prints a benign "Nothing to read on input"
+notice), but blocks forever waiting for a keypress that will never
+come when stdin is a live, open terminal nobody is typing into.
+Notably, unbinding a *tpm2* slot earlier in this same testing session
+never hit this, so it wasn't obviously a universal risk until it was.
+Fixed at the one chokepoint every mutating command already routes
+through: `run_cmd` now always redirects the command's stdin from
+`/dev/null`, closing this risk everywhere at once rather than only at
+the one call site that happened to surface it.
+
 ### Testing
 
 Needed a *second* disposable VM, since the first one has a plain
