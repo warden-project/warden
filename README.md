@@ -71,11 +71,13 @@ for a straightforward single-NIC DHCP LAN). Unlike every other binding
 path in Warden, root's own device can never be live test-unlocked to
 prove a binding works ahead of time — Warden always runs from the very
 filesystem it would need to unlock a second time, so a real reboot is
-the only proof; every action here says so explicitly. See
-`docs/future-work.md` and the wiki for the full design and what's
-still only unit-tested pending further real-hardware runs (Rotate,
-Status's drift check, Snapshot, Disable, and the same-host-Tang
-refusal).
+the only proof; every action here says so explicitly. **All seven
+actions are now real-hardware validated**, including Disable's full
+revert followed by an actual reboot back to a plain passphrase prompt,
+and the same-host-Tang refusal triggering live against a genuinely
+running Tang server on the test VM itself. See `docs/future-work.md`
+and the wiki for the full design and the four real bugs found and
+fixed along the way.
 
 ## Prerequisites
 

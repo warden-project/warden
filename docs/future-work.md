@@ -7,35 +7,44 @@ whenever picked up.
 
 ## Root-drive unlock (`clevis-initramfs`)
 
-Designed 2026-09-19, not yet started. Originally deferred as
-high-risk, separate scope in [`original-spec.md`](original-spec.md)
-("Root-drive unlock" section — never remove the original passphrase
-slot, confirm a recovery path exists first, never reachable
-accidentally from the general enrolment wizard). This section is now
-the full design; `original-spec.md` remains the source of the original
-constraints it must satisfy.
+Designed 2026-09-19. Originally deferred as high-risk, separate scope
+in [`original-spec.md`](original-spec.md) ("Root-drive unlock" section
+— never remove the original passphrase slot, confirm a recovery path
+exists first, never reachable accidentally from the general enrolment
+wizard). This section is now the full design; `original-spec.md`
+remains the source of the original constraints it must satisfy.
 
-**Status: all seven actions built, wired in, and both pin types are
-now real-hardware validated.** All of
-Enable/Add/Remove/Rotate/Status/Snapshot/Disable exist in
-`lib/features/root_unlock.sh`, and menu 13 is now wired into
-`bin/warden`'s main menu (Exit moved to 14) now that the full action
-set is present — matching the "never expose a half-finished menu 13"
-rule this was held back under while only Enable existed. TPM2 was
-confirmed first via an actual reboot: `clevis luks bind` for a TPM2
-pin succeeded following the install→regenerate→bind sequencing fix
-below, and on reboot `systemd-cryptsetup` found the volume "already
-active" by the time the real OS started. LAN-Tang was then confirmed
-independently and conclusively: Add bound a Tang pin (cross-host, at
-the first VM's Tang server), Remove then deleted the TPM2 binding
-entirely so no fallback could mask the result, and a reboot with
-*only* the Tang binding present came up fully automatically — see
-"Resolved: LAN-Tang does not need a GRUB kernel-parameter change"
-below. Both pin types are now equally trusted, not just TPM2. Status,
-Snapshot, and Rotate are still only unit-tested (static `declare -f`
-assertions plus real-primitive tests for the pure functions) — Add and
-Remove are now also real-hardware validated, as above. See "Testing"
-below for what's left.
+**Status: complete and fully real-hardware validated, 2026-09-20.**
+All seven actions (Enable, Add, Remove, Rotate, Status, Snapshot,
+Disable) exist in `lib/features/root_unlock.sh`, menu 13 is wired into
+`bin/warden`'s main menu (Exit moved to 14), and every single one of
+them — not just Enable — has now been driven for real against the
+LUKS-root test VM, with real reboots proving the two riskiest claims
+(a TPM2-only bind unlocking automatically, and a Tang-only bind doing
+the same) and real state inspection (`clevis luks list`, `luksDump`,
+package status, initramfs hook files) confirming every other action's
+effects match what it claims. TPM2 was confirmed first via an actual
+reboot: `clevis luks bind` for a TPM2 pin succeeded following the
+install→regenerate→bind sequencing fix below, and on reboot
+`systemd-cryptsetup` found the volume "already active" by the time the
+real OS started. LAN-Tang was then confirmed independently and
+conclusively: Add bound a Tang pin (cross-host, at the first VM's Tang
+server), Remove then deleted the TPM2 binding entirely so no fallback
+could mask the result, and a reboot with *only* the Tang binding
+present came up fully automatically — see "Resolved: LAN-Tang does not
+need a GRUB kernel-parameter change" below. The same-host-Tang refusal
+was confirmed live against a genuinely running Tang server on the
+LUKS-root VM itself, blocked via exact IP, `localhost`, and its own
+hostname. Rotate was confirmed live (new binding added and left
+alongside the old ones when removal was declined, exactly as
+designed). Status's drift check was confirmed against a real,
+non-Warden-triggered `update-initramfs -u` run, correctly detecting
+drift and clearing it via Snapshot. Disable was confirmed via a full
+real revert followed by an actual reboot: the machine came back up at
+a plain interactive LUKS passphrase prompt with automatic unlock
+completely gone, exactly as before this feature was ever enabled. Four
+real bugs were found and fixed along the way — see below and the wiki
+for the full account of each.
 
 **A second real bug was found on the very first test run**, more
 fundamental than anything ZFS hit: root's LUKS device is *always*
@@ -386,25 +395,32 @@ it's ready as the LAN-Tang test target whenever this gets picked up:
 point the LUKS-root VM's root-unlock Tang pin at
 `192.168.86.41:7591`.
 
-Validation plan, updated now that all seven actions exist:
-**Done**: TPM2-only Enable with a real reboot; the LAN-Tang networking
-question (resolved, see above); Add against a real cross-host Tang
-server, confirming it touches nothing under `/boot` (no initramfs
-regeneration triggered); Remove against a real slot (deleting the TPM2
-binding to force the Tang-only test); and a Tang-only reboot proving
-the new binding actually works, not just that the bind call succeeded.
-Still outstanding: the same-host-Tang refusal actually triggering
-against a Tang instance on this VM itself; Rotate exercised against
-real slots (including its explicit non-verification warning actually
-appearing before old-slot removal is offered); Status's drift check
-against a real kernel update or manual `update-initramfs -u` run, not
-just the synthetic file-content tests already covering the underlying
-`root_unlock_initramfs_drift_status` logic; Snapshot's on-demand
-refresh; Disable's full revert sequence with a reboot afterward
-confirming the passphrase-only prompt actually returns; and a
-deliberate near-miss (corrupt/replace the initramfs some other way) to
-confirm the backup-and-recover story — including the standalone
-script's own safeguards — actually works, not just the happy path.
+Validation plan: **all done as of 2026-09-20.** TPM2-only Enable with
+a real reboot; the LAN-Tang networking question (resolved, see above);
+Add against a real cross-host Tang server, confirming it touches
+nothing under `/boot` (no initramfs regeneration triggered); Remove
+against real slots (including deleting the TPM2 binding to force the
+Tang-only test, and cleanly removing a redundant slot after Rotate);
+a Tang-only reboot proving the new binding actually works, not just
+that the bind call succeeded; the same-host-Tang refusal triggering
+live against a genuinely running Tang server on the LUKS-root VM
+itself (blocked via exact IP, `localhost`, and its own hostname);
+Rotate exercised against real slots, confirming the new binding is
+added and the old one(s) genuinely left untouched when removal is
+declined; Status's drift check against a real, non-Warden-triggered
+`update-initramfs -u` run, correctly detecting drift and clearing it
+via Snapshot; and Disable's full revert sequence with a real reboot
+afterward, confirming the passphrase-only prompt actually returns with
+automatic unlock completely gone.
+
+Not done, and now deliberately deprioritized rather than outstanding:
+a deliberate near-miss (corrupt/replace the initramfs some other way)
+to further stress-test the backup-and-recover story's standalone
+script — the design and unit tests already cover this at the file
+level, and every actual mutating action along the way has now been
+proven correct against real hardware, so this would mainly be testing
+the recovery script in isolation rather than anything Warden itself
+still needs proven.
 
 ## ZFS pool/dataset support
 
