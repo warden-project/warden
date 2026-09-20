@@ -157,6 +157,8 @@ feature_status_dashboard() {
     local tmpfile
     tmpfile="$(mktemp)"
     render_status_report > "$tmpfile"
-    whiptail --title "Warden -- Status dashboard" --scrolltext --textbox "$tmpfile" 30 100
+    # See warden_msg's comment in lib/tui/menu.sh: Escape must never
+    # crash the tool, even on a read-only informational screen.
+    whiptail --title "Warden -- Status dashboard" --scrolltext --textbox "$tmpfile" 30 100 || true
     rm -f "$tmpfile"
 }

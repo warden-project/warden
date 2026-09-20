@@ -157,9 +157,17 @@ group_same_server() {
 }
 
 # save_bindings_config <json> — backs up any existing saved config first.
+#
+# Locked to 700/600: this file names the exact Tang server
+# addresses/ports and SSS threshold this host trusts for automatic
+# unlock -- real reconnaissance value to a local unprivileged user if
+# left world-readable, unlike every other Warden-created artifact of
+# comparable sensitivity (logs, header backups, keyfiles, recovery
+# kits are all similarly locked down).
 save_bindings_config() {
     local json="$1"
     mkdir -p "$WARDEN_STATE_DIR"
+    chmod 700 "$WARDEN_STATE_DIR"
     if [[ -f "$WARDEN_BINDINGS_FILE" ]]; then
         backup_file "$WARDEN_BINDINGS_FILE" >/dev/null
     fi
@@ -171,6 +179,7 @@ save_bindings_config() {
         : > "$before"
     fi
     printf '%s\n' "$json" > "$WARDEN_BINDINGS_FILE"
+    chmod 600 "$WARDEN_BINDINGS_FILE"
     cp -p "$WARDEN_BINDINGS_FILE" "$after"
     log_diff "$WARDEN_BINDINGS_FILE" "$before" "$after"
     rm -f "$before" "$after"

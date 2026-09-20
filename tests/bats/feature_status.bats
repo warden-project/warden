@@ -156,3 +156,40 @@ EOF
     [[ "$out" != *"ZFS:"* ]]
 }
 
+
+@test "feature_status_dashboard survives Escape on its whiptail textbox instead of crashing the whole tool" {
+    # Regression test for a real gap found in a full-codebase security
+    # review: this call to whiptail --textbox was raw, not routed
+    # through warden_msg's Escape-safe wrapper -- and unlike
+    # confirm_destructive_device_action (whose only two call sites both
+    # wrap it in `if ! ...; then`, which suspends set -e for everything
+    # inside), this is invoked as a bare case-statement action from
+    # bin/warden's main loop, so an unguarded nonzero exit here really
+    # does propagate and kill the whole script under set -euo pipefail.
+    # Confirmed empirically before fixing: a bare `if cmd; then` around
+    # a failing call does NOT trigger set -e for anything inside it,
+    # but a plain un-wrapped statement (like a case branch) does.
+    mkdir -p "${TEST_TMPDIR}/bin"
+    cat > "${TEST_TMPDIR}/bin/whiptail" <<'INNEREOF'
+#!/usr/bin/env bash
+exit 1
+INNEREOF
+    chmod +x "${TEST_TMPDIR}/bin/whiptail"
+    render_status_report() { echo "fake report"; }
+    export -f render_status_report
+
+    run bash -c "
+set -euo pipefail
+PATH='${TEST_TMPDIR}/bin:'\$PATH
+source '${WARDEN_ROOT}/lib/core/log.sh'
+source '${WARDEN_ROOT}/lib/core/exec.sh'
+WARDEN_LOG_DIR='${WARDEN_LOG_DIR}'
+log_init
+render_status_report() { echo fake; }
+$(declare -f feature_status_dashboard)
+feature_status_dashboard
+echo survived
+"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"survived"* ]]
+}

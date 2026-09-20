@@ -151,6 +151,19 @@ EOF
     [ "$(find "$WARDEN_BACKUP_DIR" -name 'tang-bindings.json.*.bak' | wc -l)" -eq 1 ]
 }
 
+@test "save_bindings_config locks down the state dir and file to 700/600" {
+    # Regression test for a real gap found in a full-codebase security
+    # review: this file names the exact Tang server addresses/ports and
+    # SSS threshold this host trusts for automatic unlock -- real
+    # reconnaissance value to a local unprivileged user if left
+    # world-readable, unlike every other Warden-created artifact of
+    # comparable sensitivity (logs, header backups, keyfiles, recovery
+    # kits are all similarly locked down already).
+    save_bindings_config '{"pin_type":"tang"}'
+    [ "$(stat -c '%a' "$WARDEN_STATE_DIR")" = "700" ]
+    [ "$(stat -c '%a' "$WARDEN_BINDINGS_FILE")" = "600" ]
+}
+
 @test "load_bindings_config returns empty when nothing saved yet" {
     [ -z "$(load_bindings_config)" ]
 }

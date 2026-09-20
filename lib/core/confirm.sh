@@ -74,11 +74,16 @@ confirm_destructive_device_action() {
     local snapshot_file
     snapshot_file="$(mktemp)"
     lsblk_snapshot > "$snapshot_file"
-    whiptail "${bt_opt[@]}" --title "Confirm target device" --scrolltext --textbox "$snapshot_file" 24 100
+    # See warden_msg's comment in lib/tui/menu.sh: a --textbox/--msgbox
+    # only ever has one meaningful outcome (dismiss and continue), but
+    # whiptail still exits 1 if dismissed via Escape -- unguarded here
+    # would crash the whole script under set -e, right in the middle
+    # of the most safety-critical confirmation flow in the tool.
+    whiptail "${bt_opt[@]}" --title "Confirm target device" --scrolltext --textbox "$snapshot_file" 24 100 || true
     rm -f "$snapshot_file"
 
     if ! guard_not_system_critical "$dev"; then
-        whiptail "${bt_opt[@]}" --title "REFUSED: system-critical device" --msgbox "${dev} (${identifier}) is or backs this system's root filesystem, /boot, or /boot/efi.\n\nWarden refuses this by default." 14 78
+        whiptail "${bt_opt[@]}" --title "REFUSED: system-critical device" --msgbox "${dev} (${identifier}) is or backs this system's root filesystem, /boot, or /boot/efi.\n\nWarden refuses this by default." 14 78 || true
         if ! confirm_typed_phrase "$identifier" "To override this refusal, type this back exactly:\n\n${identifier}" "$backtitle"; then
             log_line "GUARD OVERRIDE: refused for ${dev} (${identifier}) -- override not confirmed"
             return 1
