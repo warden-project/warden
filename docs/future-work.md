@@ -637,3 +637,66 @@ manual intervention on the following boot, marker file intact.
 
 ZFS pool support is now complete for the single-disk-pool scope
 decided above.
+
+## A single health-check / self-test action
+
+Raised 2026-09-20, not yet scoped. Checking whether everything Warden
+has configured is actually still healthy currently means visiting
+several menus by hand: menu 7 for binding/mount state, menu 13's
+Status for root-unlock drift, and there's no single place that
+re-verifies Tang reachability for every *configured* binding at once
+(menu 7 only shows reachability for servers a currently-bound device
+already references) or confirms a TPM2 chip is still present and the
+right packages are still installed.
+
+The idea: one action (`warden check`, or a new menu item) that walks
+every managed device and configured binding and reports pass/fail for
+each — Tang servers reachable, TPM2 hardware present where a tpm2 pin
+is bound, ZFS import units still enabled where expected, root-unlock's
+drift check — and exits non-zero if anything needs attention, so it
+can be run unattended (a cron job, a monitoring check) rather than
+only ever read interactively. Would need a non-interactive/quiet
+output mode to be genuinely cron-friendly, which ties into the
+scriptable-mode idea below rather than being fully separate from it.
+
+## Off-host sync for root-unlock recovery kits
+
+Raised 2026-09-20, not yet scoped. Root-unlock's recovery kits
+(`docs/usage/13-root-unlock.md`) currently live only on the same
+machine they protect — the guide + script on `/boot`, the initramfs
+backup under `/root`. That's sufficient for the failure modes the
+design targets (a bad Clevis binding, an initramfs regeneration gone
+wrong), but if the whole machine is lost (disk failure, theft,
+destroyed hardware) the recovery kit is lost with it, right when it
+would matter most for reconstructing what was configured.
+
+The idea: an optional step, after a kit is created, to also copy it
+(guide + script + initramfs backup) to a configured off-host
+destination — scp/rsync to another host, or an object storage target
+— so a total loss of the machine doesn't also mean losing the means to
+understand or recover its root-unlock configuration. Would need to
+think through what's safe to send off-host (the guide/script contain
+no secrets and are already described as fine to store openly; the
+initramfs backup itself is also not secret) and how credentials for
+the destination itself get configured and stored securely by Warden.
+
+## A non-interactive / scriptable mode
+
+Raised 2026-09-20, not yet scoped, and the largest of these three —
+closer to a second front-end than a small addition. Every wizard today
+is whiptail-driven, meaning Warden can only be operated by a human
+sitting at an interactive session. A config-file or flag-driven path
+through the same underlying primitives (`run_cmd`, the device
+resolution/guard functions, the bind/enrol logic) would let Warden be
+driven from provisioning tooling instead — cloud-init, Ansible, Packer
+image builds — rather than only ever by hand after the fact.
+
+This would touch a lot of surface area (every wizard currently
+prompts, confirms, and previews via whiptail as one integrated flow)
+and raises real safety questions of its own: the typed-confirmation
+and root/boot/EFI-override mechanisms exist specifically to slow a
+human down before a destructive action, and a non-interactive mode
+would need its own equally-deliberate equivalent (an explicit
+config-level acknowledgement, most likely) rather than silently
+skipping that friction. Worth a proper design conversation before
+starting, not a small patch.
