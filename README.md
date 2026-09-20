@@ -177,12 +177,12 @@ bats tests/bats/
 ```
 
 Some tests require root (anything that actually formats a loop device
-or reloads systemd units) and are skipped otherwise. CI only runs
-`shellcheck` — the available runner is a shared, non-ephemeral host,
-not a safe place to install packages or run the bats suite (real loop
-devices, real `cryptsetup`) against. Run `bats tests/bats/` as root
-locally, or on a dedicated disposable test VM, to exercise the
-root-gated tests for real.
+or reloads systemd units) and are skipped otherwise. There is no CI
+pipeline: `shellcheck -x bin/warden lib/core/*.sh lib/tui/*.sh
+lib/features/*.sh` and the full `bats tests/bats/` run (as root, or on
+a dedicated disposable test VM, to exercise the root-gated tests for
+real) are both run locally before every push, as a hard discipline
+rather than an automated gate.
 
 ## Documentation
 
