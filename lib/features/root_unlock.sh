@@ -1004,13 +1004,13 @@ root_unlock_action_disable() {
 feature_root_unlock_menu() {
     local action
     action="$(warden_menu "Root-drive unlock" "clevis-initramfs -- automatic root unlock at boot (TPM2 / LAN-only Tang). See menu 1 to install prerequisite packages first if needed." \
-        enable "Enable -- first-time setup" \
-        add "Add -- bind an additional pin" \
-        remove "Remove -- delete an existing binding" \
-        rotate "Rotate -- bind new, then remove old" \
-        status "Status -- current bindings + drift check" \
-        snapshot "Snapshot -- refresh the recovery kit on demand" \
-        disable "Disable -- fully revert to passphrase-only")" || return 0
+        enable "First-time setup" \
+        add "Bind an additional pin" \
+        remove "Delete an existing binding" \
+        rotate "Bind new, then remove old" \
+        status "Current bindings + drift check" \
+        snapshot "Refresh the recovery kit on demand" \
+        disable "Fully revert to passphrase-only")" || return 0
 
     case "$action" in
         enable) root_unlock_action_enable ;;

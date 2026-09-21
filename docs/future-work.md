@@ -390,7 +390,9 @@ testing can point at the first VM's already-running Tang server for a
 genuine cross-host case. The first VM's Tang is deliberately kept on a
 non-default port (7591, reconfigured via menu 2 itself rather than by
 hand, which incidentally re-exercised that menu for real and caught
-two unrelated real bugs — see Lessons Learned) at `192.168.86.41`, so
+two unrelated real bugs — see
+[Lessons Learned](https://github.com/warden-project/warden/wiki/Lessons-Learned))
+at `192.168.86.41`, so
 it's ready as the LAN-Tang test target whenever this gets picked up:
 point the LUKS-root VM's root-unlock Tang pin at
 `192.168.86.41:7591`.
@@ -450,7 +452,8 @@ ever wanted.
 
 **Architecture below is validated against real hardware** (Ubuntu
 24.04 VM, real reboots, not just read from docs) — see the wiki's
-Lessons Learned page for the three real bugs this testing found and
+[Lessons Learned](https://github.com/warden-project/warden/wiki/Lessons-Learned)
+page for the three real bugs this testing found and
 fixed along the way: a pre-existing, ZFS-unrelated boot-unlock gap for
 any "no mountpoint" device, a genuine systemd ordering-cycle trap in
 the first ZFS-ordering approach tried, and cryptsetup refusing a
@@ -489,7 +492,9 @@ crypttab entry Warden creates has `_netdev` set, which routes its
 of `cryptsetup.target` — and `remote-cryptsetup.target` is disabled by
 default. This isn't ZFS-specific at all: it's why a device enrolled
 with mountpoint "none" never unlocked at boot even on the existing
-ext4 path (now fixed — see Lessons Learned). Enabling
+ext4 path (now fixed — see
+[Lessons Learned](https://github.com/warden-project/warden/wiki/Lessons-Learned)).
+Enabling
 `remote-cryptsetup.target` (`ensure_systemd_unit_enabled`, already
 landed in `complete_enrolment`) is a prerequisite this ZFS work
 inherits for free, not something ZFS support needs to solve itself.
@@ -605,7 +610,8 @@ currently imported" if it isn't right now) instead of an fstab line
 that would never apply to a ZFS-backed device anyway.
 
 Confirmed via the real dashboard on the test VM, and it caught two
-real bugs bats' stubbed tests hadn't (see the wiki's Lessons Learned
+real bugs bats' stubbed tests hadn't (see the wiki's
+[Lessons Learned](https://github.com/warden-project/warden/wiki/Lessons-Learned)
 page): `unit_state`'s existence check doesn't work for
 template-instantiated unit names, and `zfs list`'s tab-separated
 output rendered as visually cramped/misaligned in whiptail's textbox.

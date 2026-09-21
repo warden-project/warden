@@ -24,7 +24,8 @@ during development, not adopted as abstract best practice:
   Reachability is tested, not inferred. Several real bugs in this
   project existed specifically because an assumption — about a path, a
   device state, a config default — went unchecked; see the wiki's
-  Lessons Learned page for the actual incidents.
+  [Lessons Learned](https://github.com/warden-project/warden/wiki/Lessons-Learned)
+  page for the actual incidents.
 - **Prove it on real hardware, not just in a test suite.** The bats
   suite runs against loop-device-backed images and catches most
   regressions cheaply, but it cannot catch everything a real reboot
@@ -66,8 +67,9 @@ during development, not adopted as abstract best practice:
 
 Every one of the above has been driven interactively against real
 Ubuntu Server hardware with real reboots, not just exercised through
-the automated test suite — see the wiki's Lessons Learned page for
-what that testing actually found and fixed along the way.
+the automated test suite — see the wiki's
+[Lessons Learned](https://github.com/warden-project/warden/wiki/Lessons-Learned)
+page for what that testing actually found and fixed along the way.
 
 ## Screenshots
 
@@ -167,8 +169,8 @@ because of real incidents, not hypothetical caution:
   always keeps the original LUKS passphrase working, with a
   machine-specific recovery kit generated before any change is made.
 
-See the wiki's "Lessons learned" page for the full background on each
-real incident referenced above.
+See the wiki's [Lessons Learned](https://github.com/warden-project/warden/wiki/Lessons-Learned)
+page for the full background on each real incident referenced above.
 
 ## Testing
 

@@ -38,9 +38,10 @@ configuration (menu 3) first.
    `/etc/fstab` entry (ZFS doesn't use one) — instead enables a
    per-device `warden-zfs-import@<mapper>.service` unit that imports
    and mounts the pool once the device unlocks at boot. See the wiki's
-   Lessons Learned page for why this needed its own dedicated unit
-   rather than a drop-in on the shared `zfs-import-*` units (two real
-   systemd ordering cycles, found via actual reboot tests).
+   [Lessons Learned](https://github.com/warden-project/warden/wiki/Lessons-Learned)
+   page for why this needed its own dedicated unit rather than a
+   drop-in on the shared `zfs-import-*` units (two real systemd
+   ordering cycles, found via actual reboot tests).
 
 The recovery passphrase is piped to `cryptsetup` on stdin, never passed
 as a command-line argument or written to the session log — only the

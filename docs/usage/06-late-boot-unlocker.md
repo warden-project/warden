@@ -4,7 +4,7 @@ Verifies `clevis-systemd` is actually installed before doing anything
 else — this exact gap (installed `clevis`/`clevis-luks` but not
 `clevis-systemd`) is a confirmed past incident that silently broke
 boot-time unlock while everything else looked correct. See the wiki's
-Lessons Learned page.
+[Lessons Learned](https://github.com/warden-project/warden/wiki/Lessons-Learned) page.
 
 - If `clevis-systemd` isn't installed, stops and tells you to install
   it from menu 1 — it does not proceed on an assumption.

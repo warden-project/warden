@@ -47,11 +47,14 @@ saved trust configuration (menu 3) first.
    rather than at the next reboot. For a ZFS-backed device, this
    involves a brief export/close/reopen/reimport dance instead of a
    simple second mapping, since the device is already open under its
-   real name by this point (see the wiki's Lessons Learned page).
+   real name by this point (see the wiki's
+   [Lessons Learned](https://github.com/warden-project/warden/wiki/Lessons-Learned)
+   page).
 8. If any address in the trust configuration is Tailscale-flagged,
    also adds a `systemd-cryptsetup@<mapper>.service.d` drop-in ordering
    this device's unlock after `tailscale-online.target` — idempotent,
    backed up before any change, using the properly systemd-escaped
    unit name for the mapper. See the wiki's "Tailscale ordering gap"
-   entry (Lessons Learned) for why this matters: `network-online.target`
-   alone doesn't guarantee the tailnet is actually reachable yet.
+   entry in [Lessons Learned](https://github.com/warden-project/warden/wiki/Lessons-Learned)
+   for why this matters: `network-online.target` alone doesn't
+   guarantee the tailnet is actually reachable yet.

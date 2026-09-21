@@ -7,7 +7,9 @@ what each component does, before asking what to install.
 - **Tang only** — installs `tang`.
 - **Clevis only** — installs `clevis clevis-luks clevis-systemd` (all
   three, every time — `clevis-systemd` being silently missed is a
-  confirmed past incident; see the wiki's Lessons Learned page).
+  confirmed past incident; see the wiki's
+  [Lessons Learned](https://github.com/warden-project/warden/wiki/Lessons-Learned)
+  page).
 - **Both** — both of the above.
 - Optionally offers `clevis-tpm2` (TPM2 pin support) when Clevis is
   selected, with a one-line note that PCR-sealed bindings can break
