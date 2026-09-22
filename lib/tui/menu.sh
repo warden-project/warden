@@ -17,7 +17,7 @@ warden_msg() {
     # cancelled via Escape instead. Under bin/warden's `set -e`, an
     # unguarded call here would kill the entire running script the
     # moment someone pressed Escape on what is meant to be a purely
-    # informational screen -- found live while exercising menu 13.
+    # informational screen -- found live while exercising menu 6.
     local title="$1" text="$2"
     whiptail --title "$title" --msgbox "$text" 16 78 || true
 }

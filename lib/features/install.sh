@@ -4,9 +4,9 @@
 # clevis-initramfs (root-drive unlock) is deliberately not offered
 # here. It has its own guided wizard with extra warnings (never remove
 # the original passphrase slot, confirm a recovery path exists first)
-# under menu 13, which installs it itself as part of Enable -- offering
+# under menu 6, which installs it itself as part of Enable -- offering
 # the bare package here, ahead of that wizard, would just invite
-# exactly the kind of manual misuse menu 13 exists to prevent.
+# exactly the kind of manual misuse menu 6 exists to prevent.
 
 WARDEN_TANG_PKGS=(tang)
 WARDEN_CLEVIS_CORE_PKGS=(clevis clevis-luks clevis-systemd)

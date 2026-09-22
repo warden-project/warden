@@ -384,7 +384,7 @@ complete_enrolment() {
         else
             msg+="/fstab are updated"
         fi
-        msg+=". The test-unlock succeeded, so this should unlock automatically at boot once the late-boot unlocker (menu 6) is enabled."
+        msg+=". The test-unlock succeeded, so this should unlock automatically at boot once the late-boot unlocker (menu 7) is enabled."
         [[ "$needs_tailscale_dropin" == "1" ]] && msg+="\n\nA systemd ordering drop-in was also added so unlock waits for Tailscale to be up, not just basic networking."
         warden_msg "Enrolment complete" "$msg"
     else

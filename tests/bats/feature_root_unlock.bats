@@ -518,7 +518,7 @@ EOF
 }
 
 @test "root_unlock_action_rotate is explicit that the new binding is not live-verified before offering to remove the old one" {
-    # Unlike menu 8's rotate (which test-unlocks the new slot before
+    # Unlike menu 10's rotate (which test-unlocks the new slot before
     # ever offering to remove the old one), root's rotate can't do
     # that -- root's device is always in use while Warden runs. This
     # must never be silently glossed over.

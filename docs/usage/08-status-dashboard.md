@@ -1,4 +1,4 @@
-# Menu 7 — Status dashboard
+# Menu 8 — Status dashboard
 
 Read-only. Never changes anything on the system. For every
 `crypto_LUKS` device currently visible to the kernel, shows:

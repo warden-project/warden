@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# lib/features/header_backup.sh — menu 9: backup LUKS header(s)
+# lib/features/header_backup.sh — menu 11: backup LUKS header(s)
 #
 # A header backup contains wrapped key material and is sensitive --
 # Warden reminds of this in the UI itself, not just in docs, and

@@ -18,7 +18,7 @@ EOF
 }
 
 @test "warden_msg does not propagate a nonzero exit when its dialog is cancelled" {
-    # Found live while exercising menu 13: bin/warden runs under
+    # Found live while exercising menu 6 (root-drive unlock): bin/warden runs under
     # set -euo pipefail, and warden_msg previously called whiptail
     # unguarded -- pressing Escape on what's meant to be a purely
     # informational message dialog silently killed the entire running

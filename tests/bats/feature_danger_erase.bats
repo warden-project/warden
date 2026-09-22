@@ -82,8 +82,8 @@ EOF
     # erased device can still have a boot-time ZFS import unit
     # enabled, and the "still has a crypttab entry" warning should
     # mention that too, not just the crypttab entry itself. Plain text
-    # reference to menu 12, not a function call from uninstall.sh --
-    # menu 11 and menu 12 must still share zero code path.
+    # reference to menu 13, not a function call from uninstall.sh --
+    # menu 14 and menu 13 must still share zero code path.
     local body
     body="$(declare -f feature_danger_erase_menu)"
     [[ "$body" == *'is_systemd_unit_enabled "warden-zfs-import@'* ]]

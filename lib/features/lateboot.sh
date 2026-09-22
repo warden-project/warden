@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# lib/features/lateboot.sh — menu 6: enable/verify the late-boot unlocker
+# lib/features/lateboot.sh — menu 7: enable/verify the late-boot unlocker
 #
 # clevis-systemd being silently missing (clevis/clevis-luks installed,
 # clevis-systemd not) is a confirmed past incident: everything about a

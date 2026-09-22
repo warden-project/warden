@@ -1,4 +1,4 @@
-# Menu 3 — Tang servers to trust (bindings)
+# Menu 3 — Remote Tang/TPM2 trust config (for enrolling drives)
 
 Builds and saves the pin configuration that the LUKS enrolment wizard
 (menu 5) binds devices against. This is a Day-0 "what do we trust and

@@ -66,7 +66,7 @@ fi
 
 log_init
 
-# `warden check` — the same health check menu 14 shows, printed
+# `warden check` — the same health check menu 9 shows, printed
 # non-interactively instead of via whiptail, for cron/monitoring use.
 # Exit status is the report's own: 0 if everything passed, 1 if
 # anything needs attention. No separate quiet mode -- capture stdout
@@ -78,25 +78,31 @@ fi
 
 MENU_TEXT="Day 0 / Day 1 / Maintenance / Danger Zone -- select an option:"
 
+# Ordered to read top-to-bottom the way you'd actually use the tool:
+# install, then enrol a drive (root included), then day-to-day
+# maintenance, then uninstall, with the single most irreversible
+# action last on purpose -- you have to scroll past everything else to
+# reach it. No numbered Exit item: whiptail's own Cancel button
+# already reads "Exit" and does the same thing, so a duplicate entry
+# would just be the same action twice.
 main_menu_loop() {
     local choice
     while true; do
-        choice="$(whiptail --title "Warden -- NBDE Management" --cancel-button "Exit" --menu "$MENU_TEXT" 24 78 17 \
-            1 "Install components (Tang / Clevis / both)" \
-            2 "Configure Tang server" \
-            3 "Tang servers to trust (bindings)" \
-            4 "LUKS setup wizard" \
-            5 "LUKS enrolment wizard" \
-            6 "Enable/verify late-boot unlocker" \
-            7 "Status dashboard" \
-            8 "Add / remove / rotate a binding" \
-            9 "Backup LUKS header(s)" \
-            10 "Rotate Tang server keys" \
-            11 "DANGER ZONE: Erase LUKS header" \
-            12 "Uninstall / revert" \
-            13 "Root-drive unlock" \
-            14 "Health check" \
-            15 "Exit" \
+        choice="$(whiptail --title "Warden -- NBDE Management" --cancel-button "Exit" --menu "$MENU_TEXT" 24 78 16 \
+            1 "Install components (Tang, Clevis, TPM2, ZFS, Tailscale)" \
+            2 "Configure this host's own Tang server" \
+            3 "Remote Tang/TPM2 trust config (for enrolling drives)" \
+            4 "Format a new drive and enrol it" \
+            5 "Enrol an existing encrypted drive" \
+            6 "Root-drive unlock (this machine's own boot drive)" \
+            7 "Verify the late-boot unlocker" \
+            8 "Status dashboard" \
+            9 "Health check" \
+            10 "Manage a drive's binding (add / remove / rotate)" \
+            11 "Backup LUKS header(s)" \
+            12 "Rotate this host's own Tang server keys" \
+            13 "Uninstall / revert (5 independent actions)" \
+            14 "DANGER ZONE: Erase LUKS header" \
             3>&1 1>&2 2>&3)" || exit 0
 
         case "$choice" in
@@ -105,16 +111,15 @@ main_menu_loop() {
             3) feature_tang_bindings_menu ;;
             4) feature_luks_setup_menu ;;
             5) feature_luks_enrol_menu ;;
-            6) feature_lateboot_menu ;;
-            8) feature_binding_rotate_menu ;;
-            9) feature_header_backup_menu ;;
-            10) feature_tang_key_rotate_menu ;;
-            11) feature_danger_erase_menu ;;
-            12) feature_uninstall_menu ;;
-            7) feature_status_dashboard ;;
-            13) feature_root_unlock_menu ;;
-            14) feature_health_check_menu ;;
-            15) exit 0 ;;
+            6) feature_root_unlock_menu ;;
+            7) feature_lateboot_menu ;;
+            8) feature_status_dashboard ;;
+            9) feature_health_check_menu ;;
+            10) feature_binding_rotate_menu ;;
+            11) feature_header_backup_menu ;;
+            12) feature_tang_key_rotate_menu ;;
+            13) feature_uninstall_menu ;;
+            14) feature_danger_erase_menu ;;
             *) warden_msg "Not yet implemented" "Menu item ${choice} is not yet implemented yet." ;;
         esac
     done

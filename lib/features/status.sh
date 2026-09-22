@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# lib/features/status.sh — menu 7: read-only status dashboard
+# lib/features/status.sh — menu 8: read-only status dashboard
 #
 # Every function here is read-only by design (no run_cmd calls) --
 # this menu item must never mutate state, only report it.

@@ -1,4 +1,4 @@
-# Menu 1 — Install components
+# Menu 1 — Install components (Tang, Clevis, TPM2, ZFS, Tailscale)
 
 Installs Tang, Clevis, or both. Shows current install status for every
 package this menu manages first, then a plain-language reminder of

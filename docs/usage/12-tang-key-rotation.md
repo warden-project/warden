@@ -1,6 +1,6 @@
-# Menu 10 — Rotate Tang server keys
+# Menu 12 — Rotate this host's own Tang server keys
 
-Only meaningful on a host that runs Tang itself — distinct from menu 8,
+Only meaningful on a host that runs Tang itself — distinct from menu 10,
 which rotates a *client's* binding. If Tang isn't installed here, this
 menu says so and stops.
 

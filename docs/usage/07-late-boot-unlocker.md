@@ -1,4 +1,4 @@
-# Menu 6 — Enable/verify late-boot unlocker
+# Menu 7 — Verify the late-boot unlocker
 
 Verifies `clevis-systemd` is actually installed before doing anything
 else — this exact gap (installed `clevis`/`clevis-luks` but not

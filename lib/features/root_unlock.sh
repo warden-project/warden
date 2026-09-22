@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# lib/features/root_unlock.sh — menu 13: root-drive unlock (clevis-initramfs)
+# lib/features/root_unlock.sh — menu 6: root-drive unlock (clevis-initramfs)
 #
 # See docs/future-work.md for the full design. This file starts with
 # the pure, read-only safety-check primitives the wizard depends on --
@@ -455,11 +455,11 @@ print("\n".join(urls))
     return 1
 }
 
-# --- Menu 13 actions -----------------------------------------------------
+# --- Menu 6 actions -----------------------------------------------------
 #
 # Deliberately not wired into bin/warden's main menu until the full
 # action set (Enable/Add/Remove/Rotate/Status/Snapshot/Disable) is
-# built and tested -- never expose a half-finished menu 13.
+# built and tested -- never expose a half-finished menu 6.
 
 # root_unlock_action_enable — first-time setup.
 root_unlock_action_enable() {
@@ -574,7 +574,7 @@ root_unlock_action_enable() {
     # signal available here -- a real reboot is the only actual proof.
     record_initramfs_reference "$initramfs_path"
 
-    warden_msg "Enable complete" "Root-drive unlock is enabled: clevis luks bind succeeded for the ${pin_type} pin on ${root_dev}.\n\nIMPORTANT: unlike every other binding in Warden, this could NOT be verified with a live test-unlock -- root's own device is always in use while Warden is running, so there is no way to safely test it without an actual reboot. A successful bind here is not the same guarantee menus 4/5/8 give you.\n\nDo not close your only access to this machine until you have rebooted and confirmed it unlocks correctly.\n\nYour recovery kit:\n${WARDEN_ROOT_UNLOCK_BOOT_DIR}/${kit_ts} (guide + script)\n${WARDEN_ROOT_UNLOCK_ROOT_DIR}/${kit_ts} (initramfs backup)\n\nRead the guide there before rebooting."
+    warden_msg "Enable complete" "Root-drive unlock is enabled: clevis luks bind succeeded for the ${pin_type} pin on ${root_dev}.\n\nIMPORTANT: unlike every other binding in Warden, this could NOT be verified with a live test-unlock -- root's own device is always in use while Warden is running, so there is no way to safely test it without an actual reboot. A successful bind here is not the same guarantee menus 4/5/10 give you.\n\nDo not close your only access to this machine until you have rebooted and confirmed it unlocks correctly.\n\nYour recovery kit:\n${WARDEN_ROOT_UNLOCK_BOOT_DIR}/${kit_ts} (guide + script)\n${WARDEN_ROOT_UNLOCK_ROOT_DIR}/${kit_ts} (initramfs backup)\n\nRead the guide there before rebooting."
 }
 
 # root_unlock_action_add — bind an additional pin alongside whatever's
@@ -657,7 +657,7 @@ root_unlock_action_add() {
 }
 
 # root_unlock_action_remove — remove one existing Clevis binding from
-# root. Same hard gate as menu 8 (run_clevis_luks_unbind refuses
+# root. Same hard gate as menu 10 (run_clevis_luks_unbind refuses
 # anything without a Clevis token per cryptsetup's own metadata): the
 # passphrase slot can never be touched through this path. No
 # initramfs regeneration needed, for the same reason as Add.
@@ -718,7 +718,7 @@ root_unlock_action_remove() {
 # the old one(s) once the new one is confirmed added. Cannot
 # test-unlock the new slot live (root's device is always in use while
 # Warden runs), so "confirmed" here means the bind call itself
-# succeeded -- weaker than menu 8's rotate, which does verify with a
+# succeeded -- weaker than menu 10's rotate, which does verify with a
 # live test-unlock. This is stated explicitly before the old slot(s)
 # are offered for removal, so nobody removes their only proven-working
 # path based on a false sense of verification.
@@ -773,7 +773,7 @@ root_unlock_action_rotate() {
     local passphrase
     passphrase="$(whiptail --passwordbox "Enter this device's EXISTING LUKS passphrase, to authorise adding the new Clevis binding:" 12 70 3>&1 1>&2 2>&3)" || return 0
 
-    if ! warden_yesno "Confirm" "This will:\n\n1. Bind a NEW ${pin_type} slot on ${root_dev}\n2. Only if that bind call succeeds, offer to remove the OLD slot(s)\n\nUnlike menu 8's rotate, step 1 cannot be confirmed with a live test-unlock -- root's device is always in use while Warden runs. \"Succeeds\" here means clevis luks bind exited cleanly, not that a reboot has proven it works. The old binding is never touched if the bind call itself fails.\n\nProceed?"; then
+    if ! warden_yesno "Confirm" "This will:\n\n1. Bind a NEW ${pin_type} slot on ${root_dev}\n2. Only if that bind call succeeds, offer to remove the OLD slot(s)\n\nUnlike menu 10's rotate, step 1 cannot be confirmed with a live test-unlock -- root's device is always in use while Warden runs. \"Succeeds\" here means clevis luks bind exited cleanly, not that a reboot has proven it works. The old binding is never touched if the bind call itself fails.\n\nProceed?"; then
         return 0
     fi
 
@@ -941,7 +941,7 @@ root_unlock_action_snapshot() {
 # Remove), then uninstall clevis-initramfs and regenerate to strip the
 # hook out, with its own backup-first step, same as Enable. Existing
 # recovery kits from earlier enables are left alone, not auto-deleted
-# -- they're the operator's own safety net, matching how menu 12
+# -- they're the operator's own safety net, matching how menu 13
 # treats everything else non-destructively.
 root_unlock_action_disable() {
     if ! is_root_unlock_enabled; then
@@ -995,9 +995,9 @@ root_unlock_action_disable() {
     warden_msg "Disable complete" "Root-drive unlock has been fully reverted on ${root_dev}: all Clevis bindings removed, clevis-initramfs uninstalled, initramfs regenerated. Boot now prompts for the LUKS passphrase only, exactly as before this feature was ever enabled.\n\nRecovery kits from earlier use were left in place:\n${WARDEN_ROOT_UNLOCK_BOOT_DIR}\n${WARDEN_ROOT_UNLOCK_ROOT_DIR}\n\nDelete them yourself later if you no longer want them."
 }
 
-# feature_root_unlock_menu — menu 13's own action menu. Kept
-# structurally separate from menu 8 (see docs/future-work.md) even
-# though the underlying primitives are shared: menu 8's device list
+# feature_root_unlock_menu — menu 6's own action menu. Kept
+# structurally separate from menu 10 (see docs/future-work.md) even
+# though the underlying primitives are shared: menu 10's device list
 # comes from managed_luks_devices, which deliberately excludes root
 # via guard_not_system_critical, so root can never be reached from
 # there by accident.

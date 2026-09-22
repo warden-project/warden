@@ -16,8 +16,8 @@ remains the source of the original constraints it must satisfy.
 
 **Status: complete and fully real-hardware validated, 2026-09-20.**
 All seven actions (Enable, Add, Remove, Rotate, Status, Snapshot,
-Disable) exist in `lib/features/root_unlock.sh`, menu 13 is wired into
-`bin/warden`'s main menu (Exit moved to 14), and every single one of
+Disable) exist in `lib/features/root_unlock.sh`, menu 6 is wired into
+`bin/warden`'s main menu, and every single one of
 them — not just Enable — has now been driven for real against the
 LUKS-root test VM, with real reboots proving the two riskiest claims
 (a TPM2-only bind unlocking automatically, and a Tang-only bind doing
@@ -101,25 +101,26 @@ never the kit's own necessarily-different backup content.
   Tang address resolves to any of this host's own currently-assigned
   addresses (not just literal `127.0.0.1` — a LAN IP that happens to
   be this host's own counts too), not just a fixed loopback check.
-- **New menu 13** (`Root-drive unlock`), Exit moves to 14. Kept fully
+- **A new, self-contained menu** (`Root-drive unlock`, now menu 6 after
+  the 2026-09-21 main-menu reorganisation), kept fully
   self-contained rather than folded into existing menus, matching the
   spec's requirement that this never be accidentally reachable from
   the general wizard — the same reasoning that already keeps the
-  Danger Zone (menu 11) structurally separate from Uninstall (menu 12).
+  Danger Zone (menu 14) structurally separate from Uninstall (menu 13).
 
-### Menu 13's actions: Enable, Add, Remove, Rotate, Status, Snapshot, Disable
+### Menu 6's actions: Enable, Add, Remove, Rotate, Status, Snapshot, Disable
 
 No device picker anywhere in this menu — there's only ever one root
 device, resolved fresh each time, never cached, consistent with the
 rest of the project's "never trust a stale device reference" rule.
 
-Binding management (Add/Remove/Rotate) can't just delegate to menu 8,
+Binding management (Add/Remove/Rotate) can't just delegate to menu 10,
 even though a root LUKS device is mechanically identical to any other
-once it has bindings: menu 8's device list is already built from
+once it has bindings: menu 10's device list is already built from
 `managed_luks_devices`, which excludes root via the same
-`guard_not_system_critical` check menu 5 uses. Reusing menu 8 directly
+`guard_not_system_critical` check menu 5 uses. Reusing menu 10 directly
 would reintroduce exactly the "accidentally reachable from the general
-wizard" risk the spec warns against. So menu 13 needs its own thin
+wizard" risk the spec warns against. So menu 6 needs its own thin
 add/remove/rotate, reusing the underlying `run_clevis_luks_bind` /
 `run_clevis_luks_unbind` / hard non-Clevis-slot-gate primitives
 internally, but as a structurally distinct entry point — the same
@@ -137,7 +138,7 @@ low-level primitives, shares zero code path at the menu level).
   redoing setup.
 - **Add** — bind an additional pin alongside whatever's already there
   (e.g. TPM2 now, LAN-Tang added later). Shows current bindings first,
-  same "state before action" pattern as menu 8. Since the
+  same "state before action" pattern as menu 10. Since the
   `clevis-initramfs` boot script reads bindings live off the LUKS
   header at boot time rather than baking them into the initramfs
   image, **this needs no initramfs regeneration at all** — a
@@ -149,7 +150,7 @@ low-level primitives, shares zero code path at the menu level).
   against real hardware while building Enable — corrected once the
   same constraint was recognised to apply equally to every action
   here, not just Enable.
-- **Remove** / **Rotate** — same shape as menu 8's equivalents, same
+- **Remove** / **Rotate** — same shape as menu 10's equivalents, same
   hard gate that structurally prevents ever touching a non-Clevis
   (passphrase) slot. No initramfs regeneration needed here either, for
   the same reason as Add. Rotate cannot live-verify the new binding
@@ -176,7 +177,7 @@ low-level primitives, shares zero code path at the menu level).
   same as Enable. Existing recovery kits from earlier enables are left
   alone, not auto-deleted (they're the operator's own safety net;
   destroying them as a side effect of an unrelated action would be
-  wrong, matching how menu 12 already treats everything else
+  wrong, matching how menu 13 already treats everything else
   non-destructively).
 
 ### Ordering matters: regenerate the initramfs *before* binding, not after
@@ -437,14 +438,14 @@ no mirror/raidz, no multi-device pickers). Fits into menus 4/5 as a
 filesystem-type choice alongside ext4/etc., not a separate menu.
 
 **Status: all six planned pieces are done** — menu 1 (install), menu 4
-(new device), menu 5 (enrol an existing device), menu 7 (status
-dashboard), menu 11 (Danger Zone erase completion message), and menu
-12 (uninstall "forget" action). Every piece has been validated
+(new device), menu 5 (enrol an existing device), menu 8 (status
+dashboard), menu 14 (Danger Zone erase completion message), and menu
+13 (uninstall "forget" action). Every piece has been validated
 end-to-end through the real TUI on real hardware: menu 1/4/5 with full
 reboots proving auto-unlock → auto-import → auto-mount with no manual
 intervention (menu 5's case additionally proved a pool created under
 one mapper name gets correctly re-discovered and re-enrolled under its
-own real name after being "forgotten"/moved), and menu 11/12 via real
+own real name after being "forgotten"/moved), and menu 14/13 via real
 create-then-forget-then-re-import testing. This feature is complete
 for the single-disk-pool scope decided above; multi-disk pools
 (mirror/raidz) remain a distinct, larger, not-yet-scoped feature if
@@ -578,18 +579,18 @@ mapping first, run the normal throwaway-name test-unlock, then reopen
 the real mapper and re-import the pool so the operator's session ends
 in the same state it would have without the test running at all.
 
-### Done: menus 11 and 12
+### Done: menus 14 and 13
 
-- Menu 12 (uninstall/revert)'s "forget" action now checks for an
+- Menu 13 (uninstall/revert)'s "forget" action now checks for an
   enabled `warden-zfs-import@<mapper>.service`, and if present:
   exports the zpool (only if currently imported) and disables the
   unit. Never touches the pool's data (export, not destroy) or the
   LUKS layer at all -- matches this action's existing scope exactly.
-- Menu 11 (Danger Zone erase)'s "still has a crypttab entry" boot-hang
+- Menu 14 (Danger Zone erase)'s "still has a crypttab entry" boot-hang
   warning now also checks for and mentions an enabled
   `warden-zfs-import@` unit for the erased device, pointing at the
-  same menu 12 action above. Plain text, not a function call -- menu
-  11 and menu 12 still share zero code path (verified via grep, same
+  same menu 13 action above. Plain text, not a function call -- menu
+  14 and menu 13 still share zero code path (verified via grep, same
   as before).
 
 Confirmed live on the test VM: created a real ZFS-backed device
@@ -600,7 +601,7 @@ reboot isn't the right test for this action specifically, since its
 whole purpose is to make the device stop doing anything automatic at
 boot; the create → forget → re-import cycle is the real proof.
 
-### Done: menu 7
+### Done: menu 8
 
 `render_status_report` now checks each managed device for an enabled
 `warden-zfs-import@<mapper>.service` before falling back to the usual
@@ -649,14 +650,14 @@ decided above.
 Raised 2026-09-20. **Status: done**, same day — small enough that it
 didn't warrant sitting on the backlog. Checking whether everything
 Warden has configured was actually still healthy used to mean
-visiting several menus by hand: menu 7 for binding/mount state, menu
-13's Status for root-unlock drift, with no single place re-verifying
-Tang reachability for every *configured* binding at once (menu 7 only
+visiting several menus by hand: menu 8 for binding/mount state, menu
+6's Status for root-unlock drift, with no single place re-verifying
+Tang reachability for every *configured* binding at once (menu 8 only
 ever showed reachability for servers a currently-bound device already
 referenced) or confirming a TPM2 chip was still present with the right
 packages installed.
 
-Implemented as `lib/features/health_check.sh` (menu 14, plus
+Implemented as `lib/features/health_check.sh` (menu 9, plus
 `warden check` non-interactively): walks every managed device and
 configured binding and reports PASS/FAIL/WARN for Tang reachability,
 TPM2 hardware/package presence (only checked if some binding actually
@@ -664,7 +665,7 @@ uses a tpm2 pin), ZFS import units, the late-boot unlocker path, and
 root-unlock drift (a WARN, not a FAIL — drift alone never invalidates
 a binding). One render function backs both front ends, so there's only
 one implementation to keep correct. Deliberately composition, not new
-logic — every individual check reuses a primitive menu 7 or menu 13
+logic — every individual check reuses a primitive menu 8 or menu 6
 already had and already tested. No separate quiet mode was added: the
 exit code (0 clean, 1 needs attention) is the actionable signal for a
 cron job or monitoring check; the full text is there for when you need
@@ -673,7 +674,7 @@ to see why.
 ## Off-host sync for root-unlock recovery kits
 
 Raised 2026-09-20, not yet scoped. Root-unlock's recovery kits
-(`docs/usage/13-root-unlock.md`) currently live only on the same
+(`docs/usage/06-root-unlock.md`) currently live only on the same
 machine they protect — the guide + script on `/boot`, the initramfs
 backup under `/root`. That's sufficient for the failure modes the
 design targets (a bad Clevis binding, an initramfs regeneration gone
@@ -711,3 +712,26 @@ would need its own equally-deliberate equivalent (an explicit
 config-level acknowledgement, most likely) rather than silently
 skipping that friction. Worth a proper design conversation before
 starting, not a small patch.
+
+## Test against the current latest Ubuntu LTS
+
+Raised 2026-09-21. Every real-hardware claim in this project — every
+"confirmed on real hardware" comment, every real reboot test, all of
+`docs/future-work.md` and the wiki's Lessons Learned — was validated
+against Ubuntu Server 24.04 LTS specifically, never anything newer.
+The README's prerequisites section says so explicitly rather than
+claiming untested forward-compatibility ("24.04 LTS (other versions
+not yet tested)"), on the same "check, don't assume" principle behind
+everything else in this project: package names, systemd unit specifics,
+default LUKS2/cryptsetup behaviour, and netplan/systemd-networkd
+defaults have all had at least one real surprise already during this
+project's own development, and a newer LTS is exactly the kind of
+thing likely to have its own.
+
+Not yet started. Whenever picked up: build a disposable test VM on the
+current latest Ubuntu LTS release, and re-run at least the highest-risk
+real-hardware validations already done against 24.04 — a full install
+→ enrol → reboot cycle for a secondary drive, and root-drive unlock's
+Enable with a real reboot (the single riskiest claim in the whole
+project, per its own design doc). If it passes, widen the README's
+prerequisites line with real evidence behind it, not just optimism.

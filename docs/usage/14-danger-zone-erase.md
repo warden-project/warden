@@ -1,4 +1,4 @@
-# Menu 11 — DANGER ZONE: Erase LUKS header
+# Menu 14 — DANGER ZONE: Erase LUKS header
 
 For secure disposal of a drive (e.g. one that can't reliably be wiped
 the normal way). **Not** a routine maintenance action — this is the
@@ -33,11 +33,11 @@ banner so it never looks like a routine screen.
    now permanently unrecoverable, even though the bulk data area
    itself was never touched. If the erased device still has a
    `/etc/crypttab` entry, the completion message says so explicitly
-   and points to menu 12's "remove crypttab/fstab entries" action —
+   and points to menu 13's "remove crypttab/fstab entries" action —
    with no key slot left, the device can never unlock again, and its
    crypttab entry has no `nofail` option, so leaving it in place risks
    hanging the next boot. If it also has a `warden-zfs-import@`
-   unit enabled, that's mentioned too, since the same menu 12 action
+   unit enabled, that's mentioned too, since the same menu 13 action
    disables it as well.
 
 See the wiki's confirmation-phrase design notes for why `ERASE

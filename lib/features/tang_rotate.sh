@@ -1,7 +1,7 @@
 # shellcheck shell=bash
-# lib/features/tang_rotate.sh — menu 10: rotate this host's Tang server keys
+# lib/features/tang_rotate.sh — menu 12: rotate this host's Tang server keys
 #
-# Distinct from menu 8 (rotating a CLIENT's binding): this is for a
+# Distinct from menu 10 (rotating a CLIENT's binding): this is for a
 # host that runs Tang itself, rotating the server's own signing/
 # exchange keys.
 #
@@ -119,7 +119,7 @@ rotate_tang_keys() {
 
 feature_tang_key_rotate_menu() {
     if ! is_pkg_installed tang; then
-        warden_msg "Tang not installed" "This host doesn't run Tang, so there are no server keys to rotate here. (This is different from menu 8, which rotates a client's binding.)"
+        warden_msg "Tang not installed" "This host doesn't run Tang, so there are no server keys to rotate here. (This is different from menu 10, which rotates a client's binding.)"
         return 0
     fi
 

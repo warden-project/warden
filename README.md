@@ -78,7 +78,13 @@ page for what that testing actually found and fixed along the way.
   <img src="docs/images/main-menu.png" alt="Warden's main menu" width="640">
 </p>
 <p align="center">
+  <img src="docs/images/install-menu.png" alt="Warden's install-components picker" width="640">
+</p>
+<p align="center">
   <img src="docs/images/root-unlock-menu.png" alt="Warden's root-drive unlock menu" width="640">
+</p>
+<p align="center">
+  <img src="docs/images/health-check.png" alt="Warden's health check report, showing a mix of PASS and WARN results" width="640">
 </p>
 <!-- markdownlint-enable MD033 -->
 
@@ -91,7 +97,7 @@ itself as a native systemd service, that *is* in scope.
 
 ## Prerequisites
 
-- Ubuntu Server 24.04 LTS
+- Ubuntu Server 24.04 LTS (other versions not yet tested)
 - `whiptail` (present by default on Ubuntu Server)
 - Root privileges to run `bin/warden` (see Safety model)
 
@@ -163,7 +169,7 @@ because of real incidents, not hypothetical caution:
   missed on install, silently breaking late-boot unlock — every
   required package is checked explicitly and individually, never
   assumed to ride in with a related one.
-- **Root-drive unlock can never be reached by accident.** Menu 13 is
+- **Root-drive unlock can never be reached by accident.** Menu 6 is
   structurally separate from the general enrolment/binding menus —
   the same isolation the Danger Zone already has from Uninstall — and
   always keeps the original LUKS passphrase working, with a

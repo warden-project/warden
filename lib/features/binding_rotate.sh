@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# lib/features/binding_rotate.sh — menu 8: add/remove/rotate a binding
+# lib/features/binding_rotate.sh — menu 10: add/remove/rotate a binding
 #
 # The safe pattern for changing an existing binding: bind the new
 # config into a fresh slot first, verify it actually works, and only
@@ -277,7 +277,7 @@ binding_action_rotate() {
         unlock_result="$(test_unlock_and_cleanup "$dev")"
     fi
     if [[ "$unlock_result" != "ok" ]]; then
-        warden_msg "New binding did not verify -- old binding left in place" "The new binding (slot ${new_slot}) was added but failed to test-unlock. The old binding is untouched, so this device can still unlock as before.\n\nInvestigate before retrying (check Tang reachability and the session log at ${WARDEN_LOG_FILE}). You can remove the failed new slot ${new_slot} from menu 8's Remove action if you want to abandon this attempt."
+        warden_msg "New binding did not verify -- old binding left in place" "The new binding (slot ${new_slot}) was added but failed to test-unlock. The old binding is untouched, so this device can still unlock as before.\n\nInvestigate before retrying (check Tang reachability and the session log at ${WARDEN_LOG_FILE}). You can remove the failed new slot ${new_slot} from menu 10's Remove action if you want to abandon this attempt."
         return 0
     fi
 

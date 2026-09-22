@@ -1,9 +1,9 @@
-# Menu 13 — Root-drive unlock (`clevis-initramfs`)
+# Menu 6 — Root-drive unlock (`clevis-initramfs`)
 
 Automatic unlock of the machine's *own* root filesystem at boot — TPM2
 and/or a LAN-only Tang server — instead of only ever prompting for a
-passphrase interactively. Structurally separate from menu 8, even
-though the underlying primitives are shared: menu 8's device list
+passphrase interactively. Structurally separate from menu 10, even
+though the underlying primitives are shared: menu 10's device list
 (`managed_luks_devices`) deliberately excludes root, so root can never
 be reached from the general enrolment/binding menus by accident. There
 is no device picker here — there's only ever one root device, resolved
@@ -52,7 +52,7 @@ need one.
   bindings live off the LUKS header at boot time, not from a baked-in
   image.
 - **Remove** — pick a bound slot from the displayed list and unbind
-  it. Same hard non-Clevis-slot gate as menu 8: a slot without a
+  it. Same hard non-Clevis-slot gate as menu 10: a slot without a
   Clevis token attached (i.e. the passphrase slot) can never be
   touched through this path. Warns explicitly if it's the only
   remaining Clevis binding.
@@ -84,7 +84,7 @@ need one.
 
 ## Unlike every other binding path in Warden: no live test-unlock
 
-Every other enrolment wizard in Warden (menus 4/5/8) proves a new
+Every other enrolment wizard in Warden (menus 4/5/10) proves a new
 binding works by actually test-unlocking it before declaring success.
 Root's own device can never do this: whenever Warden is running, it is
 running *from* the very filesystem it would need to test-unlock, so

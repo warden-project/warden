@@ -1,9 +1,9 @@
-# Menu 14 — Health check
+# Menu 9 — Health check
 
 A single pass/fail pass across everything else in this tool already
 configured, so checking whether it's all still healthy doesn't mean
 visiting several other menus by hand. Read-only, like the status
-dashboard (menu 7) — this never changes anything.
+dashboard (menu 8) — this never changes anything.
 
 Checks, each shown as `PASS`/`FAIL`/`WARN` (or a plain note when
 there's nothing of that kind configured to check):
@@ -22,11 +22,11 @@ there's nothing of that kind configured to check):
   installed. Confirms `clevis-luks-askpass.path` is active.
 - **Root-drive unlock drift** — only checked if root-drive unlock is
   enabled. A `WARN`, not a `FAIL`: drift means the recovery kit is
-  stale, not that any binding is at risk (see menu 13's Status for
+  stale, not that any binding is at risk (see menu 6's Status for
   why) — still surfaced here since it needs attention (run Snapshot),
   just phrased as a warning rather than an error.
 
-Every individual check reuses a function menu 7 or menu 13 already has
+Every individual check reuses a function menu 8 or menu 6 already has
 and already tests — this menu is composition, not new logic.
 
 ## Non-interactive use: `warden check`

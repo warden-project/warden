@@ -1,4 +1,4 @@
-# Menu 2 — Configure Tang server
+# Menu 2 — Configure this host's own Tang server
 
 Only available once Tang is installed (menu 1). Configures the local
 `tangd.socket` unit:

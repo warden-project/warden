@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# lib/features/danger_erase.sh — menu 11: DANGER ZONE, cryptographic erase
+# lib/features/danger_erase.sh — menu 14: DANGER ZONE, cryptographic erase
 #
 # For secure disposal of a drive (e.g. one that can't reliably be wiped
 # the normal way) -- NOT a routine maintenance action. This is the
@@ -9,7 +9,7 @@
 # danger_textbox, and WARDEN_DANGER_BACKTITLE threaded through the
 # shared confirmation gate) so it never looks like a routine screen.
 #
-# Uninstall/revert (menu 12) must never be able to reach this code path
+# Uninstall/revert (menu 13) must never be able to reach this code path
 # -- see lib/features/uninstall.sh, which only ever unbinds Clevis
 # bindings, never erases a LUKS header.
 
@@ -105,9 +105,9 @@ feature_danger_erase_menu() {
     local mapper
     mapper="$(crypttab_mapper_for_uuid "$uuid")"
     if [[ -n "$mapper" ]]; then
-        completion+="\n\nThis device still has a /etc/crypttab entry (mapper: ${mapper}). With no key slot left, it can never unlock again -- leaving that entry in place risks hanging the next boot waiting for it. Use menu 12 (Uninstall / revert) to remove its crypttab/fstab entries once you're done with this device."
+        completion+="\n\nThis device still has a /etc/crypttab entry (mapper: ${mapper}). With no key slot left, it can never unlock again -- leaving that entry in place risks hanging the next boot waiting for it. Use menu 13 (Uninstall / revert) to remove its crypttab/fstab entries once you're done with this device."
         if is_systemd_unit_enabled "warden-zfs-import@${mapper}.service" 2>/dev/null; then
-            completion+=" That same menu 12 action also disables the boot-time ZFS import unit this device still has enabled (warden-zfs-import@${mapper}.service)."
+            completion+=" That same menu 13 action also disables the boot-time ZFS import unit this device still has enabled (warden-zfs-import@${mapper}.service)."
         fi
     fi
 

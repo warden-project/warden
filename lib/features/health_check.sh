@@ -1,16 +1,16 @@
 # shellcheck shell=bash
-# lib/features/health_check.sh — menu 14 / `warden check`: a single
+# lib/features/health_check.sh — menu 9 / `warden check`: a single
 # pass/fail health check across everything Warden has configured.
 #
-# Read-only, like the status dashboard (menu 7) -- this must never
+# Read-only, like the status dashboard (menu 8) -- this must never
 # mutate state, only report it. Deliberately composition, not new
-# logic: every check here reuses a primitive menu 7 or menu 13 already
+# logic: every check here reuses a primitive menu 8 or menu 6 already
 # uses and already has tests for, rather than re-implementing any of
 # it. See docs/future-work.md's "A single health-check / self-test
-# action" for why this exists: menu 7 only shows Tang reachability for
+# action" for why this exists: menu 8 only shows Tang reachability for
 # servers a currently-bound device already references, and there was
 # no single place confirming TPM2 hardware/packages are still present
-# or checking root-unlock's drift without a separate trip to menu 13.
+# or checking root-unlock's drift without a separate trip to menu 6.
 
 # all_configured_pins_text — the raw `clevis luks list` text for every
 # managed secondary device plus root (if root is LUKS-encrypted),
@@ -131,7 +131,7 @@ health_check_root_drift() {
     local drift
     drift="$(root_unlock_initramfs_drift_status)"
     if [[ "$drift" == *"DRIFT DETECTED"* ]]; then
-        printf 'WARN Root-drive unlock: recovery kit is stale -- run Snapshot (menu 13)\n'
+        printf 'WARN Root-drive unlock: recovery kit is stale -- run Snapshot (menu 6)\n'
         return 1
     fi
     printf 'PASS Root-drive unlock: recovery kit is up to date\n'
@@ -166,7 +166,7 @@ render_health_check_report() {
     return "$overall"
 }
 
-# feature_health_check_menu — menu 14: the interactive view of the
+# feature_health_check_menu — menu 9: the interactive view of the
 # same report `warden check` prints non-interactively.
 feature_health_check_menu() {
     local tmpfile

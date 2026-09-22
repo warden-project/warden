@@ -1,8 +1,8 @@
 # shellcheck shell=bash
-# lib/features/uninstall.sh — menu 12: uninstall / revert
+# lib/features/uninstall.sh — menu 13: uninstall / revert
 #
 # Granular, not all-or-nothing. NEVER touches actual LUKS-encrypted
-# data -- that's exclusively the Danger Zone's job (menu 11,
+# data -- that's exclusively the Danger Zone's job (menu 14,
 # lib/features/danger_erase.sh). This file must never source, call, or
 # otherwise reach anything in danger_erase.sh: the two menus are
 # reachable only from bin/warden's separate, flat dispatch on menu
@@ -94,7 +94,7 @@ uninstall_action_unbind_device() {
 # if it has one.
 #
 # Found missing during real-hardware testing of the Danger Zone erase
-# (menu 11): after an erase, every keyslot is gone, so the device can
+# (menu 14): after an erase, every keyslot is gone, so the device can
 # never unlock again -- but its crypttab entry has no "nofail" option
 # (see build_crypttab_line in lib/features/luks_enroll.sh), so leaving
 # it in place risks hanging the next boot waiting to unlock a device
@@ -130,7 +130,7 @@ uninstall_action_forget_device() {
     if [[ "$has_zfs_unit" == "1" ]]; then
         msg+="\n\nThis device also has a boot-time ZFS import unit (warden-zfs-import@${mapper}.service) enabled. It will be disabled, and the zpool exported if currently imported -- the pool and its data are left intact and could still be re-imported manually later."
     fi
-    msg+="\n\nUse this once a device is done being managed by Warden -- most importantly after a Danger Zone erase (menu 11), since a device with no key slots left can never unlock again, and an entry left behind for it can hang the next boot.\n\nThis does NOT touch the LUKS header, keyslots, or any Clevis binding on the device itself.\n\nProceed?"
+    msg+="\n\nUse this once a device is done being managed by Warden -- most importantly after a Danger Zone erase (menu 14), since a device with no key slots left can never unlock again, and an entry left behind for it can hang the next boot.\n\nThis does NOT touch the LUKS header, keyslots, or any Clevis binding on the device itself.\n\nProceed?"
 
     if ! warden_yesno "Remove crypttab/fstab entries for ${dev}" "$msg"; then
         return 0

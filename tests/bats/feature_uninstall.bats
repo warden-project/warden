@@ -51,7 +51,7 @@ EOF
 
 @test "uninstall_action_forget_device's crypttab/fstab patterns remove only the exact mapper's line" {
     # Regression test for a real gap found during real-hardware
-    # testing: after a Danger Zone erase (menu 11), a device's
+    # testing: after a Danger Zone erase (menu 14), a device's
     # crypttab entry has no working unlock method left (all keyslots
     # destroyed) and no "nofail" option, so it can hang the next boot.
     # There was no menu action anywhere to remove that entry. This
@@ -75,7 +75,7 @@ EOF
     grep -qxF "/dev/mapper/disk10 /mnt/disk10 ext4 defaults,nofail 0 2" "$WARDEN_FSTAB"
 }
 
-@test "uninstall_action_unbind_device's slot loop uses the same hard non-Clevis gate as menu 8" {
+@test "uninstall_action_unbind_device's slot loop uses the same hard non-Clevis gate as menu 10" {
     # Not a full interactive test (whiptail-dependent), but confirms
     # run_clevis_luks_unbind -- the function this action loops over --
     # is the same shared, gated implementation, not a separate one

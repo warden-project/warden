@@ -1,4 +1,4 @@
-# Menu 8 — Add / remove / rotate a binding
+# Menu 10 — Manage a drive's binding (add / remove / rotate)
 
 For a device that's already enrolled. Shows current bindings before
 offering any action — you never have to remember or type a slot number

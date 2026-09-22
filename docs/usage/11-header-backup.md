@@ -1,4 +1,4 @@
-# Menu 9 — Backup LUKS header(s)
+# Menu 11 — Backup LUKS header(s)
 
 Shows any existing backups already taken for the chosen device before
 asking whether to make another, so you're not guessing whether this
